@@ -77,6 +77,18 @@ function shortcutFromKeyboardEvent(event) {
   };
 }
 
+/** @param {KeyboardEvent} event */
+function isGlobalOpenShortcut(event) {
+  return event.code === 'KeyC' && event.shiftKey && event.ctrlKey && !event.metaKey && !event.altKey;
+}
+
+/** @param {KeyboardEvent} event */
+function isGlobalOpenShortcutMacCommand(event) {
+  return event.code === 'KeyC' && event.shiftKey && event.metaKey && !event.ctrlKey && !event.altKey;
+}
+
+globalThis.isGlobalOpenShortcut = isGlobalOpenShortcut;
+globalThis.isGlobalOpenShortcutMacCommand = isGlobalOpenShortcutMacCommand;
 globalThis.parseShortcut = parseShortcut;
 globalThis.formatShortcut = formatShortcut;
 globalThis.matchesShortcut = matchesShortcut;

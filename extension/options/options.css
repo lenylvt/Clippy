@@ -156,3 +156,23 @@ kbd {
   font-size: 0.78rem;
   color: var(--accent);
 }
+
+.gallery-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: oklch(0.18 0.04 95);
+  font-weight: 650;
+  text-decoration: none;
+  user-select: none;
+  transition: transform 140ms ease;
+}
+
+.gallery-link:active {
+  transform: scale(0.97);
+}

@@ -120,14 +120,29 @@ function hideRecordingChrome() {
   hideRecordingFrame();
 }
 
-/** @param {Blob} blob @param {string} filename */
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+function showConvertingBadge() {
+  hideRecordingBadge();
+
+  const badge = document.createElement('div');
+  badge.className = 'clippy-recording-badge';
+  badge.innerHTML =
+    '<span class="clippy-recording-dot" aria-hidden="true"></span><span>Conversion en MP4…</span>';
+  document.body.appendChild(badge);
+  recordingBadge = badge;
+}
+
+function showUploadingBadge(label = 'Envoi du clip…') {
+  hideRecordingBadge();
+
+  const badge = document.createElement('div');
+  badge.className = 'clippy-recording-badge';
+  badge.innerHTML = `<span class="clippy-recording-dot" aria-hidden="true"></span><span>${label}</span>`;
+  document.body.appendChild(badge);
+  recordingBadge = badge;
+}
+
+function hideUploadingBadge() {
+  hideRecordingBadge();
 }
 
 /** @param {HTMLVideoElement} video @param {ClipRange} clip */
@@ -185,6 +200,45 @@ async function recordClipWithCaptureStream(video, clip) {
   return blob;
 }
 
+/** @param {Blob} blob @param {string} filename @param {ClipRange} clip */
+async function uploadRecordedClip(blob, filename, clip) {
+  const { workerUrl = 'https://clippy.runtimelayer.workers.dev' } = await chrome.storage.sync.get('workerUrl');
+  if (!workerUrl) {
+    throw new Error('missing_worker_url');
+  }
+
+  const youtubeUrl = window.location.href;
+  const videoId = getYoutubeVideoId(youtubeUrl);
+  if (!videoId) {
+    throw new Error('missing_video_id');
+  }
+
+  const title = document.title.replace(/\s*-\s*YouTube\s*$/i, '').trim();
+
+  showUploadingBadge();
+
+  try {
+    const result = await uploadClip(
+      {
+        blob,
+        filename,
+        videoId,
+        videoTitle: title,
+        youtubeUrl,
+        clipStart: clip.start,
+        clipEnd: clip.end,
+      },
+      workerUrl,
+    );
+
+    clippyLog('record', 'upload:done', { id: result.id, galleryUrl: result.galleryUrl });
+    chrome.tabs.create({ url: result.galleryUrl });
+    return result;
+  } finally {
+    hideUploadingBadge();
+  }
+}
+
 /** @param {ClipRange} clip */
 async function startClipRecording(clip) {
   const video = getVideo();
@@ -194,14 +248,28 @@ async function startClipRecording(clip) {
 
   const title = document.title.replace(/\s*-\s*YouTube\s*$/i, '').trim();
   const safeTitle = sanitizeFilename(title).replace(/\.+$/g, '');
-  const filename = `clippy-${safeTitle}.webm`;
 
-  clippyLog('record', 'start', { clip, filename });
+  clippyLog('record', 'start', { clip });
 
-  const blob = await recordClipWithCaptureStream(video, clip);
-  clippyLog('record', 'done', { bytes: blob.size, filename });
+  const rawBlob = await recordClipWithCaptureStream(video, clip);
+  clippyLog('record', 'done', { bytes: rawBlob.size, type: rawBlob.type });
 
-  downloadBlob(blob, filename);
+  let blob = rawBlob;
+  if (needsMp4Conversion(rawBlob)) {
+    showConvertingBadge();
+    try {
+      blob = await ensureMp4Blob(rawBlob);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      clippyLog('record', 'transcode:fail', { error: message });
+      throw new Error('transcode_failed');
+    }
+  }
+
+  const extension = clipExtensionFromMime(blob.type);
+  const filename = `clippy-${safeTitle}.${extension}`;
+
+  await uploadRecordedClip(blob, filename, clip);
 }
 
 globalThis.startClipRecording = startClipRecording;

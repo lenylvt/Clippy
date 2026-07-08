@@ -57,11 +57,11 @@ const editor = new ClipEditor({
 });
 
 /** @type {ReturnType<typeof parseShortcut> | null} */
-let activeShortcut = parseShortcut(DEFAULT_SHORTCUT);
+let activeShortcut = parseShortcut(globalThis.DEFAULT_SHORTCUT);
 
 async function loadShortcut() {
-  const { shortcut = DEFAULT_SHORTCUT } = await chrome.storage.sync.get('shortcut');
-  activeShortcut = parseShortcut(shortcut) ?? parseShortcut(DEFAULT_SHORTCUT);
+  const { shortcut = globalThis.DEFAULT_SHORTCUT } = await chrome.storage.sync.get('shortcut');
+  activeShortcut = parseShortcut(shortcut) ?? parseShortcut(globalThis.DEFAULT_SHORTCUT);
 }
 
 async function openClipEditor(options = {}) {

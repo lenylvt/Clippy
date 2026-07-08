@@ -1,11 +1,15 @@
 const DEFAULT_DURATION = 90;
+const DEFAULT_WORKER_URL = 'https://clippy.runtimelayer.workers.dev';
 
 const durationInput = document.getElementById('clip-duration');
 const durationError = document.getElementById('duration-error');
+const workerInput = document.getElementById('worker-url');
+const workerError = document.getElementById('worker-error');
 const shortcutBtn = document.getElementById('shortcut');
 const shortcutLabel = document.getElementById('shortcut-label');
 const shortcutError = document.getElementById('shortcut-error');
 const commandsLink = document.getElementById('commands-link');
+const galleryLink = document.getElementById('gallery-link');
 const status = document.getElementById('status');
 
 /** @type {ReturnType<typeof parseShortcut>} */
@@ -28,14 +32,45 @@ function renderShortcut() {
 }
 
 async function loadSettings() {
-  const { clipDuration = DEFAULT_DURATION, shortcut = DEFAULT_SHORTCUT } = await chrome.storage.sync.get([
-    'clipDuration',
-    'shortcut',
-  ]);
+  const {
+    clipDuration = DEFAULT_DURATION,
+    shortcut = DEFAULT_SHORTCUT,
+    workerUrl = DEFAULT_WORKER_URL,
+  } = await chrome.storage.sync.get(['clipDuration', 'shortcut', 'workerUrl']);
 
   durationInput.value = formatDuration(clipDuration);
+  workerInput.value = workerUrl;
+  galleryLink.href = workerUrl;
+  galleryLink.hidden = !workerUrl;
   currentShortcut = parseShortcut(shortcut) ?? parseShortcut(DEFAULT_SHORTCUT);
   renderShortcut();
+}
+
+function parseWorkerUrl(value) {
+  try {
+    const parsed = new URL(value.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+async function saveWorkerUrl() {
+  const parsed = parseWorkerUrl(workerInput.value);
+  if (!parsed) {
+    workerError.hidden = false;
+    workerInput.classList.add('invalid');
+    return;
+  }
+
+  workerError.hidden = true;
+  workerInput.classList.remove('invalid');
+  workerInput.value = parsed;
+  await chrome.storage.sync.set({ workerUrl: parsed });
+  galleryLink.href = parsed;
+  galleryLink.hidden = false;
+  showStatus('Worker enregistré');
 }
 
 async function saveDuration() {
@@ -66,6 +101,13 @@ async function saveShortcut() {
 }
 
 durationInput.addEventListener('change', saveDuration);
+workerInput.addEventListener('change', saveWorkerUrl);
+workerInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    saveWorkerUrl();
+  }
+});
 durationInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();

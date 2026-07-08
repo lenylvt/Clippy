@@ -4,7 +4,12 @@
   "description": "Clippe rapidement des passages YouTube",
   "version": "0.1.0",
   "permissions": ["storage", "tabs"],
-  "host_permissions": ["*://*.youtube.com/*"],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "http://localhost/*",
+    "https://*.workers.dev/*",
+    "https://cdn.jsdelivr.net/*"
+  ],
   "action": {
     "default_title": "Clippy — ouvrir l'éditeur",
     "default_icon": {
@@ -24,7 +29,11 @@
         "lib/log.js",
         "lib/time.js",
         "lib/filename.js",
+        "lib/youtube.js",
+        "lib/upload.js",
         "lib/recorder-mime.js",
+        "lib/clip-format.js",
+        "lib/transcode.js",
         "lib/video-frame.js",
         "lib/shortcut.js",
         "content/clip-editor.js",

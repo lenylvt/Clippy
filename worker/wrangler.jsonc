@@ -1,0 +1,24 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "clippy",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-15",
+  "observability": { "enabled": true },
+  "r2_buckets": [
+    {
+      "binding": "CLIPS",
+      "bucket_name": "clippy-clips"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "clippy",
+      "database_id": "1d9c8f39-e352-4b2f-b1d6-2dd6959e9501",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  }
+}

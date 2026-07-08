@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Clippy</title>
-    <link rel="stylesheet" href="popup.css" />
+    <title>Clippy — Réglages</title>
+    <link rel="stylesheet" href="options.css" />
   </head>
   <body>
-    <main class="popup">
+    <main class="page">
       <header class="header">
         <h1 class="title">Clippy</h1>
-        <p class="subtitle">Clippe un passage YouTube en un geste</p>
+        <p class="subtitle">Réglages de l’extension</p>
       </header>
 
       <section class="section">
@@ -38,14 +38,46 @@
         <p class="hint subtle">
           Tu peux aussi configurer
           <a id="commands-link" href="#">le raccourci global Chrome</a>
+          (<kbd>Ctrl+Shift+C</kbd> par défaut)
         </p>
+      </section>
+
+      <section class="section">
+        <label class="label" for="worker-url">URL du worker Clippy</label>
+        <p class="hint">Déployé : <code>https://clippy.runtimelayer.workers.dev</code></p>
+        <input
+          id="worker-url"
+          class="input"
+          type="url"
+          placeholder="https://clippy.example.workers.dev"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <p id="worker-error" class="error" hidden>URL invalide</p>
+      </section>
+
+      <section class="section note">
+        <p class="hint">
+          Les clips sont envoyés vers le worker puis visibles sur la page galerie. Ils expirent après
+          <strong>48 h</strong>.
+        </p>
+      </section>
+
+      <section class="section note">
+        <p class="hint">
+          Ouvre l’éditeur via l’<strong>icône Clippy</strong>, le bouton sur YouTube ou
+          <kbd>Ctrl+Shift+C</kbd>.
+        </p>
+      </section>
+
+      <section class="section">
+        <a id="gallery-link" class="gallery-link" href="#" hidden>Ouvrir la galerie des clips</a>
       </section>
 
       <p id="status" class="status" role="status"></p>
     </main>
-    <script src="../lib/log.js"></script>
     <script src="../lib/time.js"></script>
     <script src="../lib/shortcut.js"></script>
-    <script src="popup.js"></script>
+    <script src="options.js"></script>
   </body>
 </html>
