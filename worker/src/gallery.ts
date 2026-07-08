@@ -1,7 +1,7 @@
-import { renderGalleryBody } from './render';
-import { GALLERY_CLIENT_SCRIPT } from './client';
-import { GALLERY_STYLES } from './styles';
-import type { VideoGroup } from '../types';
+import { renderGalleryBody } from './gallery/render';
+import { GALLERY_CLIENT_SCRIPT } from './gallery/client';
+import { GALLERY_STYLES } from './gallery/styles';
+import type { VideoGroup } from './types';
 
 export function renderGalleryPage(groups: VideoGroup[]) {
   const body = renderGalleryBody(groups);

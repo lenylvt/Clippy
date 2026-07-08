@@ -20,5 +20,15 @@
   ],
   "triggers": {
     "crons": ["0 * * * *"]
-  }
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ClipProcessor"]
+    },
+    {
+      "tag": "v2",
+      "deleted_classes": ["ClipProcessor"]
+    }
+  ]
 }
