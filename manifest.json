@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Clippy",
+  "description": "Clippe rapidement des passages YouTube",
+  "version": "0.1.0",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["*://www.youtube.com/*"],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Clippy"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/watch*"],
+      "js": [
+        "lib/time.js",
+        "lib/shortcut.js",
+        "content/clip-editor.js",
+        "content/player-button.js",
+        "content/content.js"
+      ],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "commands": {
+    "open-clip-editor": {
+      "suggested_key": {
+        "default": "Alt+Shift+C",
+        "mac": "Alt+Shift+C"
+      },
+      "description": "Ouvrir l'éditeur Clippy"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

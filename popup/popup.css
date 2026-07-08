@@ -1,0 +1,152 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: dark;
+  --bg: oklch(0.18 0.01 260);
+  --surface: oklch(0.22 0.012 260);
+  --text: oklch(0.95 0.01 260);
+  --muted: oklch(0.7 0.02 260);
+  --accent: oklch(0.82 0.16 95);
+  --accent-dim: oklch(0.65 0.12 95);
+  --danger: oklch(0.65 0.2 25);
+  --radius: 10px;
+}
+
+html,
+body {
+  margin: 0;
+  min-width: 280px;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.popup {
+  padding: 16px;
+}
+
+.header {
+  margin-bottom: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 650;
+  text-wrap: balance;
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--surface);
+  border: 1px solid oklch(0.35 0.02 260);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.section {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.hint code {
+  font-size: 0.74rem;
+  color: var(--accent);
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid oklch(0.32 0.02 260);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.input:focus {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px oklch(0.82 0.16 95 / 0.15);
+}
+
+.input.invalid {
+  border-color: var(--danger);
+}
+
+.error {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--danger);
+}
+
+.shortcut-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-align: center;
+  font-weight: 600;
+  user-select: none;
+}
+
+.shortcut-btn.recording {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px oklch(0.82 0.16 95 / 0.15);
+  color: var(--accent);
+}
+
+.hint.subtle {
+  margin-top: 2px;
+}
+
+.hint.subtle a {
+  color: var(--accent-dim);
+  text-decoration: none;
+}
+
+.hint.subtle a:hover {
+  text-decoration: underline;
+}
+
+.status {
+  min-height: 1.1em;
+  margin: 12px 0 0;
+  font-size: 0.78rem;
+  color: var(--accent);
+  text-align: center;
+}
