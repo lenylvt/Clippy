@@ -10,6 +10,7 @@ function clip(partial: Partial<Clip> & Pick<Clip, 'id' | 'videoId' | 'createdAt'
     clipEnd: 10,
     expiresAt: Date.now() + 1000,
     url: `https://example.com/clips/${partial.id}`,
+    extension: 'mp4',
     ...partial,
   };
 }

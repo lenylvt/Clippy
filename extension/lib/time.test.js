@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import './clip-constants.js';
 import './time.js';
 
 const { clamp, formatDuration, isTimeInClip, normalizeClip, parseDuration } = globalThis;

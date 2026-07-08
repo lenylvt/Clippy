@@ -11,51 +11,64 @@ import {
   textResponse,
   withCors,
 } from './http';
+import { validateUploadPayload } from './validate';
 import type { Env } from './types';
+
+type RouteHandler = (request: Request, env: Env, origin: string, params: Record<string, string>) => Promise<Response>;
 
 async function handleUpload(request: Request, env: Env, origin: string) {
   const form = await request.formData();
   const file = form.get('file');
-  const videoId = String(form.get('videoId') ?? '').trim();
-  const videoTitle = String(form.get('videoTitle') ?? 'Sans titre').trim();
-  const youtubeUrl = String(form.get('youtubeUrl') ?? '').trim();
-  const clipStart = Number(form.get('clipStart'));
-  const clipEnd = Number(form.get('clipEnd'));
 
-  if (!(file instanceof File) || !videoId || !youtubeUrl) {
+  if (!(file instanceof File)) {
     return jsonResponse({ ok: false, error: 'invalid_payload' }, 400);
   }
 
-  if (!Number.isFinite(clipStart) || !Number.isFinite(clipEnd) || clipEnd <= clipStart) {
-    return jsonResponse({ ok: false, error: 'invalid_range' }, 400);
+  const payload = {
+    file,
+    videoId: String(form.get('videoId') ?? '').trim(),
+    videoTitle: String(form.get('videoTitle') ?? 'Sans titre').trim(),
+    youtubeUrl: String(form.get('youtubeUrl') ?? '').trim(),
+    clipStart: Number(form.get('clipStart')),
+    clipEnd: Number(form.get('clipEnd')),
+  };
+
+  const validationError = validateUploadPayload(payload);
+  if (validationError) {
+    return jsonResponse({ ok: false, error: validationError }, 400);
   }
 
   const id = createClipId();
   const extension = clipExtensionFromMime(file.type || 'video/webm');
-  const r2Key = `clips/${sanitizeR2KeyPart(videoId)}/${id}.${extension}`;
+  const r2Key = `clips/${sanitizeR2KeyPart(payload.videoId)}/${id}.${extension}`;
 
   await env.CLIPS.put(r2Key, file.stream(), {
     httpMetadata: { contentType: file.type || 'video/webm' },
   });
 
-  const { createdAt, expiresAt } = await insertClip(env, {
-    id,
-    videoId,
-    videoTitle,
-    youtubeUrl,
-    r2Key,
-    clipStart,
-    clipEnd,
-  });
+  try {
+    const { createdAt, expiresAt } = await insertClip(env, {
+      id,
+      videoId: payload.videoId,
+      videoTitle: payload.videoTitle,
+      youtubeUrl: payload.youtubeUrl,
+      r2Key,
+      clipStart: payload.clipStart,
+      clipEnd: payload.clipEnd,
+    });
 
-  return jsonResponse({
-    ok: true,
-    id,
-    url: `${origin}/clips/${id}`,
-    galleryUrl: `${origin}/`,
-    createdAt,
-    expiresAt,
-  });
+    return jsonResponse({
+      ok: true,
+      id,
+      url: `${origin}/clips/${id}`,
+      galleryUrl: `${origin}/`,
+      createdAt,
+      expiresAt,
+    });
+  } catch (error) {
+    await env.CLIPS.delete(r2Key);
+    throw error;
+  }
 }
 
 async function handleClipDownload(env: Env, id: string) {
@@ -96,6 +109,48 @@ async function handleDeleteClip(env: Env, id: string) {
   return jsonResponse({ ok: true });
 }
 
+const routes: Array<{
+  method: string;
+  pattern: RegExp;
+  handler: RouteHandler;
+}> = [
+  {
+    method: 'POST',
+    pattern: /^\/api\/clips$/,
+    handler: (request, env, origin) => handleUpload(request, env, origin),
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/clips$/,
+    handler: (_request, env, origin) => handleApiClips(env, origin),
+  },
+  {
+    method: 'GET',
+    pattern: /^\/$/,
+    handler: (_request, env, origin) => handleGallery(env, origin),
+  },
+  {
+    method: 'GET',
+    pattern: /^\/clips\/([^/]+)$/,
+    handler: (_request, env, _origin, params) => handleClipDownload(env, params.id),
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/clips\/([^/]+)$/,
+    handler: (_request, env, _origin, params) => handleDeleteClip(env, params.id),
+  },
+];
+
+function matchRoute(method: string, pathname: string) {
+  for (const route of routes) {
+    if (route.method !== method) continue;
+    const match = pathname.match(route.pattern);
+    if (!match) continue;
+    return { handler: route.handler, params: { id: match[1] ?? '' } };
+  }
+  return null;
+}
+
 export async function handleRequest(request: Request, env: Env) {
   const url = new URL(request.url);
   const origin = getOrigin(request);
@@ -104,26 +159,9 @@ export async function handleRequest(request: Request, env: Env) {
     return optionsResponse();
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/clips') {
-    return handleUpload(request, env, origin);
-  }
-
-  if (request.method === 'GET' && url.pathname === '/api/clips') {
-    return handleApiClips(env, origin);
-  }
-
-  if (request.method === 'GET' && url.pathname === '/') {
-    return handleGallery(env, origin);
-  }
-
-  const clipMatch = url.pathname.match(/^\/clips\/([^/]+)$/);
-  if (request.method === 'GET' && clipMatch) {
-    return handleClipDownload(env, clipMatch[1]);
-  }
-
-  const apiClipMatch = url.pathname.match(/^\/api\/clips\/([^/]+)$/);
-  if (request.method === 'DELETE' && apiClipMatch) {
-    return handleDeleteClip(env, apiClipMatch[1]);
+  const matched = matchRoute(request.method, url.pathname);
+  if (matched) {
+    return matched.handler(request, env, origin, matched.params);
   }
 
   return jsonResponse({ ok: false, error: 'not_found' }, 404);
@@ -138,8 +176,8 @@ export default {
     try {
       return await handleRequest(request, env);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'internal_error';
-      return jsonResponse({ ok: false, error: message }, 500);
+      console.error('[clippy]', error);
+      return jsonResponse({ ok: false, error: 'internal_error' }, 500);
     }
   },
 

@@ -289,3 +289,14 @@
       0 0 40px oklch(0.82 0.16 95 / 0.6);
   }
 }
+
+.clippy-recording-badge--error {
+  background: oklch(0.14 0.04 25 / 0.92);
+  border-color: oklch(0.62 0.22 25 / 0.75);
+  color: oklch(0.96 0.1 25);
+}
+
+.clippy-recording-badge--error .clippy-recording-dot {
+  background: oklch(0.62 0.24 25);
+  box-shadow: 0 0 12px oklch(0.62 0.24 25 / 0.8);
+}

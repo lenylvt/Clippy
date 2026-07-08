@@ -1,6 +1,11 @@
+import { DELETE_BATCH_SIZE } from './constants';
 import type { Clip, ClipRow, Env } from './types';
 
 const TTL_MS = 48 * 60 * 60 * 1000;
+
+function extensionFromR2Key(r2Key: string): 'mp4' | 'webm' {
+  return r2Key.endsWith('.mp4') ? 'mp4' : 'webm';
+}
 
 export function rowToClip(row: ClipRow, origin: string): Clip {
   return {
@@ -13,6 +18,7 @@ export function rowToClip(row: ClipRow, origin: string): Clip {
     createdAt: row.created_at,
     expiresAt: row.expires_at,
     url: `${origin}/clips/${row.id}`,
+    extension: extensionFromR2Key(row.r2_key),
   };
 }
 
@@ -83,10 +89,17 @@ export async function deleteExpiredClips(env: Env) {
     .bind(Date.now())
     .all<{ id: string; r2_key: string }>();
 
-  for (const row of results ?? []) {
-    await env.CLIPS.delete(row.r2_key);
-    await env.DB.prepare(`DELETE FROM clips WHERE id = ?`).bind(row.id).run();
+  const rows = results ?? [];
+
+  for (let index = 0; index < rows.length; index += DELETE_BATCH_SIZE) {
+    const batch = rows.slice(index, index + DELETE_BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (row) => {
+        await env.CLIPS.delete(row.r2_key);
+        await env.DB.prepare(`DELETE FROM clips WHERE id = ?`).bind(row.id).run();
+      }),
+    );
   }
 
-  return (results ?? []).length;
+  return rows.length;
 }

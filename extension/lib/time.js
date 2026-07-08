@@ -45,8 +45,8 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-/** @param {number} start @param {number} end @param {number} duration @param {number} minLength */
-function normalizeClip(start, end, duration, minLength = 3) {
+/** @param {number} start @param {number} end @param {number} duration @param {number} [minLength] */
+function normalizeClip(start, end, duration, minLength = globalThis.MIN_CLIP_SECONDS) {
   const len = clamp(end - start, minLength, duration);
   let s = clamp(start, 0, duration - len);
   let e = s + len;

@@ -20,6 +20,7 @@ export type Clip = {
   createdAt: number;
   expiresAt: number;
   url: string;
+  extension: 'mp4' | 'webm';
 };
 
 export type VideoGroup = {

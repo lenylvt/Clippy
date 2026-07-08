@@ -5,12 +5,17 @@
   "type": "module",
   "scripts": {
     "test": "vp test",
+    "vendor:ffmpeg": "node scripts/vendor-ffmpeg.mjs",
+    "postinstall": "node scripts/vendor-ffmpeg.mjs",
     "worker:dev": "wrangler dev --config worker/wrangler.jsonc",
     "worker:deploy": "wrangler deploy --config worker/wrangler.jsonc",
     "worker:migrate": "wrangler d1 migrations apply clippy --local --config worker/wrangler.jsonc"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260706.1",
+    "@ffmpeg/core": "0.12.6",
+    "@ffmpeg/ffmpeg": "0.12.10",
+    "@ffmpeg/util": "0.12.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4",
     "wrangler": "^4.69.0"

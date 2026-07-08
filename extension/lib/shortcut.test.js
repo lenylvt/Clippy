@@ -11,8 +11,8 @@ describe('parseShortcut', () => {
   });
 
   it('parses modifiers', () => {
-    expect(parseShortcut('shift+c')).toEqual({
-      alt: false, ctrl: false, meta: false, shift: true, key: 'c',
+    expect(parseShortcut('ctrl+shift+c')).toEqual({
+      alt: false, ctrl: true, meta: false, shift: true, key: 'c',
     });
     expect(parseShortcut('ctrl+shift+k')).toEqual({
       alt: false, ctrl: true, meta: false, shift: true, key: 'k',
@@ -27,18 +27,18 @@ describe('parseShortcut', () => {
 
 describe('formatShortcut', () => {
   it('formats shortcut', () => {
-    expect(formatShortcut({ alt: false, ctrl: false, meta: false, shift: true, key: 'c' })).toBe('shift+c');
+    expect(formatShortcut({ alt: false, ctrl: true, meta: false, shift: true, key: 'c' })).toBe('ctrl+shift+c');
   });
 });
 
 describe('matchesShortcut', () => {
   it('matches keyboard events', () => {
-    const shortcut = parseShortcut('shift+c');
+    const shortcut = parseShortcut('ctrl+shift+c');
     const event = {
       key: 'c',
       code: 'KeyC',
       altKey: false,
-      ctrlKey: false,
+      ctrlKey: true,
       metaKey: false,
       shiftKey: true,
     };

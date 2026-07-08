@@ -51,7 +51,9 @@ const editor = new ClipEditor({
       clippyLog('content', 'onSave:done', { start: clip.start, end: clip.end });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[Clippy] enregistrement échoué — ${message}`);
+      clippyLog('content', 'onSave:fail', { error: message });
+      showStatusBadge('Échec de l’enregistrement', { variant: 'error' });
+      window.setTimeout(() => hideStatusBadge(), 4000);
     }
   },
 });
@@ -88,8 +90,8 @@ function onKeyDown(e) {
 loadShortcut();
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && changes.shortcut) {
-    const next = changes.shortcut.newValue ?? DEFAULT_SHORTCUT;
-    activeShortcut = parseShortcut(next) ?? parseShortcut(DEFAULT_SHORTCUT);
+    const next = changes.shortcut.newValue ?? globalThis.DEFAULT_SHORTCUT;
+    activeShortcut = parseShortcut(next) ?? parseShortcut(globalThis.DEFAULT_SHORTCUT);
   }
 });
 

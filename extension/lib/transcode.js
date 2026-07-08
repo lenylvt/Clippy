@@ -1,6 +1,14 @@
 /** @param {Blob} blob */
 function needsMp4Conversion(blob) {
-  return !blob.type.toLowerCase().includes('mp4');
+  if (blob.type.toLowerCase().includes('mp4')) {
+    return false;
+  }
+
+  return shouldUsePlaybackConvert(
+    navigator.userAgent,
+    navigator.platform,
+    navigator.maxTouchPoints,
+  );
 }
 
 /** @type {Promise<{ ffmpeg: import('@ffmpeg/ffmpeg').FFmpeg; fetchFile: typeof import('@ffmpeg/util').fetchFile }> | null} */
@@ -9,13 +17,13 @@ let ffmpegLoadPromise = null;
 async function loadFfmpeg() {
   if (!ffmpegLoadPromise) {
     ffmpegLoadPromise = (async () => {
-      const { FFmpeg } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js');
-      const { fetchFile, toBlobURL } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js');
+      const vendorBase = chrome.runtime.getURL('vendor/ffmpeg');
+      const { FFmpeg } = await import(/* @vite-ignore */ `${vendorBase}/ffmpeg.js`);
+      const { fetchFile, toBlobURL } = await import(/* @vite-ignore */ `${vendorBase}/util.js`);
       const ffmpeg = new FFmpeg();
-      const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
       await ffmpeg.load({
-        coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+        coreURL: await toBlobURL(`${vendorBase}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${vendorBase}/ffmpeg-core.wasm`, 'application/wasm'),
       });
       return { ffmpeg, fetchFile };
     })();

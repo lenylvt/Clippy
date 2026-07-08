@@ -1,15 +1,9 @@
 /** @typedef {{ start: number; end: number }} ClipRange */
 
 /** @type {HTMLElement | null} */
-let recordingBadge = null;
-/** @type {HTMLElement | null} */
 let recordingFrame = null;
 /** @type {(() => void) | null} */
 let recordingFrameLayout = null;
-
-function pickMimeType() {
-  return pickRecorderMimeType();
-}
 
 /** @param {HTMLVideoElement} video */
 function getCaptureStream(video) {
@@ -59,21 +53,6 @@ function waitUntilEnd(video, endTime) {
   });
 }
 
-function showRecordingBadge() {
-  hideRecordingBadge();
-
-  const badge = document.createElement('div');
-  badge.className = 'clippy-recording-badge';
-  badge.innerHTML = '<span class="clippy-recording-dot" aria-hidden="true"></span><span>Enregistrement…</span>';
-  document.body.appendChild(badge);
-  recordingBadge = badge;
-}
-
-function hideRecordingBadge() {
-  recordingBadge?.remove();
-  recordingBadge = null;
-}
-
 /** @param {HTMLVideoElement} video */
 function showRecordingFrame(video) {
   hideRecordingFrame();
@@ -111,38 +90,13 @@ function hideRecordingFrame() {
 }
 
 function showRecordingChrome(video) {
-  showRecordingBadge();
+  showStatusBadge('Enregistrement…');
   showRecordingFrame(video);
 }
 
 function hideRecordingChrome() {
-  hideRecordingBadge();
+  hideStatusBadge();
   hideRecordingFrame();
-}
-
-function showConvertingBadge() {
-  hideRecordingBadge();
-
-  const badge = document.createElement('div');
-  badge.className = 'clippy-recording-badge';
-  badge.innerHTML =
-    '<span class="clippy-recording-dot" aria-hidden="true"></span><span>Conversion en MP4…</span>';
-  document.body.appendChild(badge);
-  recordingBadge = badge;
-}
-
-function showUploadingBadge(label = 'Envoi du clip…') {
-  hideRecordingBadge();
-
-  const badge = document.createElement('div');
-  badge.className = 'clippy-recording-badge';
-  badge.innerHTML = `<span class="clippy-recording-dot" aria-hidden="true"></span><span>${label}</span>`;
-  document.body.appendChild(badge);
-  recordingBadge = badge;
-}
-
-function hideUploadingBadge() {
-  hideRecordingBadge();
 }
 
 /** @param {HTMLVideoElement} video @param {ClipRange} clip */
@@ -152,7 +106,7 @@ async function recordClipWithCaptureStream(video, clip) {
     throw new Error('capture_stream_unavailable');
   }
 
-  const mimeType = pickMimeType();
+  const mimeType = pickRecorderMimeType();
   const chunks = [];
   const recorder = new MediaRecorder(captureStream, {
     ...(mimeType ? { mimeType } : {}),
@@ -202,7 +156,7 @@ async function recordClipWithCaptureStream(video, clip) {
 
 /** @param {Blob} blob @param {string} filename @param {ClipRange} clip */
 async function uploadRecordedClip(blob, filename, clip) {
-  const { workerUrl = 'https://clippy.runtimelayer.workers.dev' } = await chrome.storage.sync.get('workerUrl');
+  const { workerUrl = globalThis.CLIPPY_DEFAULT_WORKER_URL } = await chrome.storage.sync.get('workerUrl');
   if (!workerUrl) {
     throw new Error('missing_worker_url');
   }
@@ -215,7 +169,7 @@ async function uploadRecordedClip(blob, filename, clip) {
 
   const title = document.title.replace(/\s*-\s*YouTube\s*$/i, '').trim();
 
-  showUploadingBadge();
+  showStatusBadge('Envoi du clip…');
 
   try {
     const result = await uploadClip(
@@ -235,7 +189,7 @@ async function uploadRecordedClip(blob, filename, clip) {
     chrome.tabs.create({ url: result.galleryUrl });
     return result;
   } finally {
-    hideUploadingBadge();
+    hideStatusBadge();
   }
 }
 
@@ -244,6 +198,11 @@ async function startClipRecording(clip) {
   const video = getVideo();
   if (!video) {
     throw new Error('no_video');
+  }
+
+  const clipDuration = clip.end - clip.start;
+  if (clipDuration > MAX_CLIP_SECONDS) {
+    throw new Error('clip_too_long');
   }
 
   const title = document.title.replace(/\s*-\s*YouTube\s*$/i, '').trim();
@@ -256,7 +215,7 @@ async function startClipRecording(clip) {
 
   let blob = rawBlob;
   if (needsMp4Conversion(rawBlob)) {
-    showConvertingBadge();
+    showStatusBadge('Conversion en MP4…');
     try {
       blob = await ensureMp4Blob(rawBlob);
     } catch (error) {

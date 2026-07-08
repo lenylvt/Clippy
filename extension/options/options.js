@@ -1,5 +1,4 @@
 const DEFAULT_DURATION = 90;
-const DEFAULT_WORKER_URL = 'https://clippy.runtimelayer.workers.dev';
 
 const durationInput = document.getElementById('clip-duration');
 const durationError = document.getElementById('duration-error');
@@ -13,7 +12,7 @@ const galleryLink = document.getElementById('gallery-link');
 const status = document.getElementById('status');
 
 /** @type {ReturnType<typeof parseShortcut>} */
-let currentShortcut = parseShortcut(DEFAULT_SHORTCUT);
+let currentShortcut = parseShortcut(globalThis.DEFAULT_SHORTCUT);
 
 function showStatus(message) {
   status.textContent = message;
@@ -34,15 +33,15 @@ function renderShortcut() {
 async function loadSettings() {
   const {
     clipDuration = DEFAULT_DURATION,
-    shortcut = DEFAULT_SHORTCUT,
-    workerUrl = DEFAULT_WORKER_URL,
+    shortcut = globalThis.DEFAULT_SHORTCUT,
+    workerUrl = globalThis.CLIPPY_DEFAULT_WORKER_URL,
   } = await chrome.storage.sync.get(['clipDuration', 'shortcut', 'workerUrl']);
 
   durationInput.value = formatDuration(clipDuration);
   workerInput.value = workerUrl;
   galleryLink.href = workerUrl;
   galleryLink.hidden = !workerUrl;
-  currentShortcut = parseShortcut(shortcut) ?? parseShortcut(DEFAULT_SHORTCUT);
+  currentShortcut = parseShortcut(shortcut) ?? parseShortcut(globalThis.DEFAULT_SHORTCUT);
   renderShortcut();
 }
 
@@ -76,6 +75,12 @@ async function saveWorkerUrl() {
 async function saveDuration() {
   const parsed = parseDuration(durationInput.value);
   if (parsed === null) {
+    durationError.hidden = false;
+    durationInput.classList.add('invalid');
+    return;
+  }
+
+  if (parsed > MAX_CLIP_DURATION_OPTION) {
     durationError.hidden = false;
     durationInput.classList.add('invalid');
     return;

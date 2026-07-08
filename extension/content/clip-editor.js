@@ -1,7 +1,5 @@
 // Clip editor overlay for YouTube
 
-const MIN_CLIP_SECONDS = 3;
-
 class ClipEditor {
   /** @type {HTMLElement | null} */
   #root = null;
@@ -50,7 +48,7 @@ class ClipEditor {
     this.#clipEnd = current;
     this.#clipStart = Math.max(0, current - length);
 
-    const normalized = normalizeClip(this.#clipStart, this.#clipEnd, this.#duration, MIN_CLIP_SECONDS);
+    const normalized = normalizeClip(this.#clipStart, this.#clipEnd, this.#duration, globalThis.MIN_CLIP_SECONDS);
     this.#clipStart = normalized.start;
     this.#clipEnd = normalized.end;
 
@@ -429,13 +427,13 @@ class ClipEditor {
         this.#clipEnd = end;
       } else if (mode === 'left') {
         const end = originEnd;
-        const start = clamp(originStart + delta, 0, end - MIN_CLIP_SECONDS);
+        const start = clamp(originStart + delta, 0, end - globalThis.MIN_CLIP_SECONDS);
         this.#clipStart = start;
         this.#clipEnd = end;
         this.#seekTo(start);
       } else if (mode === 'right') {
         const start = originStart;
-        const end = clamp(originEnd + delta, start + MIN_CLIP_SECONDS, this.#duration);
+        const end = clamp(originEnd + delta, start + globalThis.MIN_CLIP_SECONDS, this.#duration);
         this.#clipStart = start;
         this.#clipEnd = end;
         this.#seekTo(end);

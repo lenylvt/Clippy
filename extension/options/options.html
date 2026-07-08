@@ -32,7 +32,7 @@
         <label class="label" for="shortcut">Raccourci clavier</label>
         <p class="hint">Clique puis appuie sur la combinaison souhaitée</p>
         <button id="shortcut" class="input shortcut-btn" type="button">
-          <span id="shortcut-label">shift+c</span>
+          <span id="shortcut-label">ctrl+shift+c</span>
         </button>
         <p id="shortcut-error" class="error" hidden>Raccourci invalide</p>
         <p class="hint subtle">
@@ -76,6 +76,8 @@
 
       <p id="status" class="status" role="status"></p>
     </main>
+    <script src="../lib/config.js"></script>
+    <script src="../lib/clip-constants.js"></script>
     <script src="../lib/time.js"></script>
     <script src="../lib/shortcut.js"></script>
     <script src="options.js"></script>

@@ -1,7 +1,7 @@
 /** @typedef {{ alt: boolean; ctrl: boolean; meta: boolean; shift: boolean; key: string }} Shortcut */
 
 const MODIFIERS = ['ctrl', 'alt', 'shift', 'meta'];
-const DEFAULT_SHORTCUT = 'shift+c';
+const DEFAULT_SHORTCUT = 'ctrl+shift+c';
 
 /** @param {string} value */
 function parseShortcut(value) {
@@ -76,19 +76,6 @@ function shortcutFromKeyboardEvent(event) {
     key: event.key.length === 1 ? event.key.toLowerCase() : event.key.toLowerCase(),
   };
 }
-
-/** @param {KeyboardEvent} event */
-function isGlobalOpenShortcut(event) {
-  return event.code === 'KeyC' && event.shiftKey && event.ctrlKey && !event.metaKey && !event.altKey;
-}
-
-/** @param {KeyboardEvent} event */
-function isGlobalOpenShortcutMacCommand(event) {
-  return event.code === 'KeyC' && event.shiftKey && event.metaKey && !event.ctrlKey && !event.altKey;
-}
-
-globalThis.isGlobalOpenShortcut = isGlobalOpenShortcut;
-globalThis.isGlobalOpenShortcutMacCommand = isGlobalOpenShortcutMacCommand;
 globalThis.parseShortcut = parseShortcut;
 globalThis.formatShortcut = formatShortcut;
 globalThis.matchesShortcut = matchesShortcut;

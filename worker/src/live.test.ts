@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_WORKER_URL } from '../../shared/config.js';
 
-const WORKER_URL = 'https://clippy.runtimelayer.workers.dev';
+const liveUrl = process.env.CLIPPY_LIVE_URL ?? DEFAULT_WORKER_URL;
 
-describe('worker live', () => {
+describe.skipIf(!process.env.CLIPPY_LIVE)('worker live', () => {
   it('expose la galerie et l’API clips', async () => {
-    const gallery = await fetch(`${WORKER_URL}/`);
+    const gallery = await fetch(`${liveUrl}/`);
     expect(gallery.status).toBe(200);
     expect(gallery.headers.get('content-type')).toContain('text/html');
 
-    const api = await fetch(`${WORKER_URL}/api/clips`);
+    const api = await fetch(`${liveUrl}/api/clips`);
     expect(api.status).toBe(200);
     const data = await api.json();
     expect(data.ok).toBe(true);
