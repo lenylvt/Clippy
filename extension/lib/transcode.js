@@ -18,12 +18,14 @@ async function loadFfmpeg() {
   if (!ffmpegLoadPromise) {
     ffmpegLoadPromise = (async () => {
       const vendorBase = chrome.runtime.getURL('vendor/ffmpeg');
-      const { FFmpeg } = await import(/* @vite-ignore */ `${vendorBase}/ffmpeg.js`);
-      const { fetchFile, toBlobURL } = await import(/* @vite-ignore */ `${vendorBase}/util.js`);
+      const { FFmpeg } = await import(/* @vite-ignore */ `${vendorBase}/ffmpeg/index.js`);
+      const { fetchFile } = await import(/* @vite-ignore */ `${vendorBase}/util/index.js`);
       const ffmpeg = new FFmpeg();
+      // MV3 CSP forbids blob: scripts — use extension URLs only.
       await ffmpeg.load({
-        coreURL: await toBlobURL(`${vendorBase}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${vendorBase}/ffmpeg-core.wasm`, 'application/wasm'),
+        classWorkerURL: `${vendorBase}/ffmpeg/worker.js`,
+        coreURL: `${vendorBase}/ffmpeg-core.js`,
+        wasmURL: `${vendorBase}/ffmpeg-core.wasm`,
       });
       return { ffmpeg, fetchFile };
     })();

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clippy</title>
+    <link rel="stylesheet" href="cache.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <div class="header-row">
+          <h1 class="title">Clippy</h1>
+          <div class="header-actions">
+            <button type="button" class="btn btn-ghost" id="refresh-btn">Actualiser</button>
+            <button type="button" class="btn btn-danger" id="clear-all-btn">Vider le cache</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="summary">
+        <div class="stat">
+          <span class="stat-label">Entrées</span>
+          <span class="stat-value" id="stat-count">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Taille</span>
+          <span class="stat-value" id="stat-size">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">TTL</span>
+          <span class="stat-value" id="stat-ttl">3 h</span>
+        </div>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+      <p id="error" class="error" hidden></p>
+
+      <section class="card">
+        <h2 class="card-title">Réglages</h2>
+
+        <div class="field">
+          <label class="field-label" for="clip-duration">Durée du clip</label>
+          <input
+            id="clip-duration"
+            class="input"
+            type="text"
+            inputmode="numeric"
+            placeholder="1:30"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <p id="duration-error" class="field-error" hidden>Format invalide</p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="worker-url">Worker</label>
+          <div class="field-row">
+            <input
+              id="worker-url"
+              class="input"
+              type="url"
+              placeholder="https://clippy.example.workers.dev"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <a id="gallery-link" class="btn btn-ghost btn-small" href="#" hidden target="_blank" rel="noopener">
+              Galerie
+            </a>
+          </div>
+          <p id="worker-error" class="field-error" hidden>URL invalide</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Cache</h2>
+        <div id="empty" class="empty" hidden>Vide</div>
+        <ul id="list" class="list" aria-live="polite"></ul>
+      </section>
+    </main>
+
+    <script src="../lib/config.js"></script>
+    <script src="../lib/clip-constants.js"></script>
+    <script src="../lib/time.js"></script>
+    <script src="cache.js"></script>
+  </body>
+</html>

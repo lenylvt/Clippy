@@ -1,164 +1,17 @@
 /** @typedef {{ start: number; end: number }} ClipRange */
 
-/** @type {HTMLElement | null} */
-let recordingFrame = null;
-/** @type {(() => void) | null} */
-let recordingFrameLayout = null;
-
-/** @param {HTMLVideoElement} video */
-function getCaptureStream(video) {
-  if (typeof video.captureStream === 'function') return video.captureStream();
-  if (typeof video.mozCaptureStream === 'function') return video.mozCaptureStream();
-  return null;
-}
-
-/** @param {HTMLVideoElement} video @param {number} time */
-function seekTo(video, time) {
-  return new Promise((resolve) => {
-    if (Math.abs(video.currentTime - time) < 0.05) {
-      resolve();
-      return;
-    }
-
-    const done = () => {
-      video.removeEventListener('seeked', done);
-      resolve();
-    };
-
-    video.addEventListener('seeked', done, { once: true });
-    video.currentTime = time;
-    window.setTimeout(done, 2000);
-  });
-}
-
-/** @param {HTMLVideoElement} video @param {number} endTime */
-function waitUntilEnd(video, endTime) {
-  return new Promise((resolve) => {
-    const finish = () => {
-      video.removeEventListener('timeupdate', onTimeUpdate);
-      video.removeEventListener('ended', finish);
-      video.pause();
-      resolve();
-    };
-
-    const onTimeUpdate = () => {
-      if (video.currentTime >= endTime - 0.05) {
-        finish();
-      }
-    };
-
-    video.addEventListener('timeupdate', onTimeUpdate);
-    video.addEventListener('ended', finish);
-    onTimeUpdate();
-  });
-}
-
-/** @param {HTMLVideoElement} video */
-function showRecordingFrame(video) {
-  hideRecordingFrame();
-
-  const frame = document.createElement('div');
-  frame.className = 'clippy-recording-frame';
-  frame.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(frame);
-  recordingFrame = frame;
-
-  const update = () => {
-    if (!recordingFrame) return;
-    const rect = video.getBoundingClientRect();
-    recordingFrame.style.top = `${rect.top}px`;
-    recordingFrame.style.left = `${rect.left}px`;
-    recordingFrame.style.width = `${rect.width}px`;
-    recordingFrame.style.height = `${rect.height}px`;
-  };
-
-  recordingFrameLayout = update;
-  update();
-  window.addEventListener('resize', update, { passive: true });
-  window.addEventListener('scroll', update, { passive: true, capture: true });
-}
-
-function hideRecordingFrame() {
-  if (recordingFrameLayout) {
-    window.removeEventListener('resize', recordingFrameLayout);
-    window.removeEventListener('scroll', recordingFrameLayout, true);
-    recordingFrameLayout = null;
+/**
+ * Create a clip via background download cache + ffmpeg crop.
+ * @param {ClipRange} clip
+ * @param {{ jobId?: string }} [options]
+ */
+async function startClipRecording(clip, options = {}) {
+  const clipDuration = clip.end - clip.start;
+  if (clipDuration > MAX_CLIP_SECONDS) {
+    throw new Error('clip_too_long');
   }
-
-  recordingFrame?.remove();
-  recordingFrame = null;
-}
-
-function showRecordingChrome(video) {
-  showStatusBadge('Enregistrement…');
-  showRecordingFrame(video);
-}
-
-function hideRecordingChrome() {
-  hideStatusBadge();
-  hideRecordingFrame();
-}
-
-/** @param {HTMLVideoElement} video @param {ClipRange} clip */
-async function recordClipWithCaptureStream(video, clip) {
-  const captureStream = getCaptureStream(video);
-  if (!captureStream) {
-    throw new Error('capture_stream_unavailable');
-  }
-
-  const mimeType = pickRecorderMimeType();
-  const chunks = [];
-  const recorder = new MediaRecorder(captureStream, {
-    ...(mimeType ? { mimeType } : {}),
-    videoBitsPerSecond: 4_000_000,
-  });
-
-  recorder.ondataavailable = (event) => {
-    if (event.data.size > 0) chunks.push(event.data);
-  };
-
-  const previousRate = video.playbackRate;
-  video.playbackRate = 1;
-  showRecordingChrome(video);
-
-  try {
-    video.pause();
-    await seekTo(video, clip.start);
-    await waitForVideoFrame(video);
-
-    const stopped = new Promise((resolve) => {
-      recorder.addEventListener('stop', () => resolve(), { once: true });
-    });
-
-    recorder.start(250);
-    await video.play();
-    await waitForPlaybackStarted(video);
-    await waitUntilEnd(video, clip.end);
-
-    if (recorder.state === 'recording') {
-      recorder.requestData();
-      recorder.stop();
-    }
-
-    await stopped;
-  } finally {
-    video.playbackRate = previousRate;
-    hideRecordingChrome();
-  }
-
-  const blob = new Blob(chunks, { type: mimeType || 'video/webm' });
-  if (blob.size < 1024) {
-    throw new Error('empty_recording');
-  }
-
-  return blob;
-}
-
-/** @param {Blob} blob @param {string} filename @param {ClipRange} clip */
-async function uploadRecordedClip(blob, filename, clip) {
-  const { workerUrl = globalThis.CLIPPY_DEFAULT_WORKER_URL } = await chrome.storage.sync.get('workerUrl');
-  if (!workerUrl) {
-    throw new Error('missing_worker_url');
+  if (clipDuration < MIN_CLIP_SECONDS) {
+    throw new Error('clip_too_short');
   }
 
   const youtubeUrl = window.location.href;
@@ -168,69 +21,94 @@ async function uploadRecordedClip(blob, filename, clip) {
   }
 
   const title = document.title.replace(/\s*-\s*YouTube\s*$/i, '').trim();
+  const jobId = options.jobId;
 
-  showStatusBadge('Envoi du clip…');
+  clippyLog('record', 'start', { clip, videoId, jobId });
 
+  const result = await chrome.runtime.sendMessage({
+    type: 'CREATE_CLIP',
+    jobId,
+    videoId,
+    youtubeUrl,
+    start: clip.start,
+    end: clip.end,
+    videoTitle: title,
+  });
+
+  if (!result?.ok) {
+    throw new Error(result?.error ?? 'create_clip_failed');
+  }
+
+  clippyLog('record', 'done', { id: result.id, galleryUrl: result.galleryUrl, jobId });
+  return result;
+}
+
+/**
+ * Capture a small JPEG data-URL of the current video frame for queue thumbs.
+ * @param {HTMLVideoElement | null} video
+ * @returns {string | undefined}
+ */
+function captureVideoThumb(video) {
+  if (!video || video.readyState < 2) return undefined;
   try {
-    const result = await uploadClip(
-      {
-        blob,
-        filename,
-        videoId,
-        videoTitle: title,
-        youtubeUrl,
-        clipStart: clip.start,
-        clipEnd: clip.end,
-      },
-      workerUrl,
-    );
-
-    clippyLog('record', 'upload:done', { id: result.id, galleryUrl: result.galleryUrl });
-    showStatusBadge('Clip envoyé');
-    window.setTimeout(() => hideStatusBadge(), 2000);
-    return result;
-  } catch (error) {
-    hideStatusBadge();
-    throw error;
+    const w = 160;
+    const h = Math.max(1, Math.round((video.videoHeight / video.videoWidth) * w)) || 90;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return undefined;
+    ctx.drawImage(video, 0, 0, w, h);
+    return canvas.toDataURL('image/jpeg', 0.72);
+  } catch {
+    return undefined;
   }
 }
 
-/** @param {ClipRange} clip */
-async function startClipRecording(clip) {
-  const video = getVideo();
-  if (!video) {
-    throw new Error('no_video');
+/**
+ * Prefetch / ensure the source video is cached while the user trims.
+ * @param {string} [youtubeUrl]
+ */
+async function ensureSourceCached(youtubeUrl = window.location.href) {
+  const videoId = getYoutubeVideoId(youtubeUrl);
+  if (!videoId) return { ok: false, error: 'missing_video_id' };
+
+  try {
+    const result = await chrome.runtime.sendMessage({
+      type: 'ENSURE_VIDEO_CACHE',
+      videoId,
+      youtubeUrl,
+    });
+    clippyLog('record', 'prefetch', result);
+    return result ?? { ok: false, error: 'no_response' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    clippyLog('record', 'prefetch:fail', { error: message });
+    return { ok: false, error: message };
   }
+}
 
-  const clipDuration = clip.end - clip.start;
-  if (clipDuration > MAX_CLIP_SECONDS) {
-    throw new Error('clip_too_long');
-  }
+/**
+ * @param {string} [youtubeUrl]
+ */
+function notifyVideoActive(youtubeUrl = window.location.href) {
+  const videoId = getYoutubeVideoId(youtubeUrl);
+  if (!videoId) return;
+  chrome.runtime.sendMessage({ type: 'VIDEO_ACTIVE', videoId, youtubeUrl }).catch(() => {});
+}
 
-  const title = document.title.replace(/\s*-\s*YouTube\s*$/i, '').trim();
-  const safeTitle = sanitizeFilename(title).replace(/\.+$/g, '');
-
-  clippyLog('record', 'start', { clip });
-
-  const rawBlob = await recordClipWithCaptureStream(video, clip);
-  clippyLog('record', 'done', { bytes: rawBlob.size, type: rawBlob.type });
-
-  let blob = rawBlob;
-  if (needsMp4Conversion(rawBlob)) {
-    showStatusBadge('Conversion en MP4…');
-    try {
-      blob = await ensureMp4Blob(rawBlob);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      clippyLog('record', 'transcode:fail', { error: message });
-      throw new Error('transcode_failed');
-    }
-  }
-
-  const extension = clipExtensionFromMime(blob.type);
-  const filename = `clippy-${safeTitle}.${extension}`;
-
-  await uploadRecordedClip(blob, filename, clip);
+/**
+ * @param {string} [youtubeUrl]
+ */
+function notifyVideoLeft(youtubeUrl = window.location.href) {
+  const videoId = getYoutubeVideoId(youtubeUrl);
+  chrome.runtime
+    .sendMessage({ type: 'VIDEO_LEFT', videoId: videoId || undefined })
+    .catch(() => {});
 }
 
 globalThis.startClipRecording = startClipRecording;
+globalThis.captureVideoThumb = captureVideoThumb;
+globalThis.ensureSourceCached = ensureSourceCached;
+globalThis.notifyVideoActive = notifyVideoActive;
+globalThis.notifyVideoLeft = notifyVideoLeft;

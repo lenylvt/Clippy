@@ -2,84 +2,11 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Clippy — Réglages</title>
-    <link rel="stylesheet" href="options.css" />
+    <meta http-equiv="refresh" content="0; url=../cache/cache.html" />
+    <title>Clippy</title>
+    <script>
+      location.replace('../cache/cache.html');
+    </script>
   </head>
-  <body>
-    <main class="page">
-      <header class="header">
-        <h1 class="title">Clippy</h1>
-        <p class="subtitle">Réglages de l’extension</p>
-      </header>
-
-      <section class="section">
-        <label class="label" for="clip-duration">Durée du clip</label>
-        <p class="hint">Exemple : <code>1:30</code> pour 1 min 30</p>
-        <input
-          id="clip-duration"
-          class="input"
-          type="text"
-          inputmode="numeric"
-          placeholder="1:30"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <p id="duration-error" class="error" hidden>Format invalide (mm:ss ou h:mm:ss)</p>
-      </section>
-
-      <section class="section">
-        <label class="label" for="shortcut">Raccourci clavier</label>
-        <p class="hint">Clique puis appuie sur la combinaison souhaitée</p>
-        <button id="shortcut" class="input shortcut-btn" type="button">
-          <span id="shortcut-label">ctrl+shift+c</span>
-        </button>
-        <p id="shortcut-error" class="error" hidden>Raccourci invalide</p>
-        <p class="hint subtle">
-          Tu peux aussi configurer
-          <a id="commands-link" href="#">le raccourci global Chrome</a>
-          (<kbd>Ctrl+Shift+C</kbd> par défaut)
-        </p>
-      </section>
-
-      <section class="section">
-        <label class="label" for="worker-url">URL du worker Clippy</label>
-        <p class="hint">Déployé : <code>https://clippy.runtimelayer.workers.dev</code></p>
-        <input
-          id="worker-url"
-          class="input"
-          type="url"
-          placeholder="https://clippy.example.workers.dev"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <p id="worker-error" class="error" hidden>URL invalide</p>
-      </section>
-
-      <section class="section note">
-        <p class="hint">
-          Les clips sont envoyés vers le worker puis visibles sur la page galerie. Ils expirent après
-          <strong>48 h</strong>.
-        </p>
-      </section>
-
-      <section class="section note">
-        <p class="hint">
-          Ouvre l’éditeur via l’<strong>icône Clippy</strong>, le bouton sur YouTube ou
-          <kbd>Ctrl+Shift+C</kbd>.
-        </p>
-      </section>
-
-      <section class="section">
-        <a id="gallery-link" class="gallery-link" href="#" hidden>Ouvrir la galerie des clips</a>
-      </section>
-
-      <p id="status" class="status" role="status"></p>
-    </main>
-    <script src="../lib/config.js"></script>
-    <script src="../lib/clip-constants.js"></script>
-    <script src="../lib/time.js"></script>
-    <script src="../lib/shortcut.js"></script>
-    <script src="options.js"></script>
-  </body>
+  <body></body>
 </html>
