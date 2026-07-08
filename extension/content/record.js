@@ -186,10 +186,12 @@ async function uploadRecordedClip(blob, filename, clip) {
     );
 
     clippyLog('record', 'upload:done', { id: result.id, galleryUrl: result.galleryUrl });
-    chrome.tabs.create({ url: result.galleryUrl });
+    showStatusBadge('Clip envoyé');
+    window.setTimeout(() => hideStatusBadge(), 2000);
     return result;
-  } finally {
+  } catch (error) {
     hideStatusBadge();
+    throw error;
   }
 }
 
