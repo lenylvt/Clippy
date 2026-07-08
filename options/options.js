@@ -98,32 +98,3 @@ commandsLink.addEventListener('click', (e) => {
 });
 
 loadSettings();
-
-async function primeActiveTabCapture() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id || !tab.url?.includes('youtube.com/watch')) {
-    clippyLog('popup', 'prime:skip', { url: tab?.url });
-    return;
-  }
-
-  clippyLog('popup', 'prime:start', { tabId: tab.id });
-
-  try {
-    const streamId = await chrome.tabCapture.getMediaStreamId(
-      tab.id ? { targetTabId: tab.id } : undefined,
-    );
-    await chrome.runtime.sendMessage({
-      type: 'CLIP_STORE_PRIME',
-      tabId: tab.id,
-      streamId,
-      source: 'popup',
-    });
-    clippyLog('popup', 'prime:ok', { tabId: tab.id });
-  } catch (error) {
-    clippyLog('popup', 'prime:fail', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
-primeActiveTabCapture();

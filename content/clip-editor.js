@@ -20,6 +20,7 @@ class ClipEditor {
   /** @type {ResizeObserver | null} */
   #layoutObserver = null;
   #layoutRaf = 0;
+  #saving = false;
 
   /** @param {{ onSave?: (clip: { start: number; end: number }) => void }} [options] */
   constructor(options = {}) {
@@ -177,8 +178,18 @@ class ClipEditor {
     });
 
     root.querySelector('[data-action="save"]')?.addEventListener('click', () => {
-      this.#onSave?.({ start: this.#clipStart, end: this.#clipEnd });
+      if (this.#saving) {
+        clippyLog('editor', 'save:ignored_busy');
+        return;
+      }
+
+      const clip = { start: this.#clipStart, end: this.#clipEnd };
+      clippyLog('editor', 'save:click', clip);
+      this.#saving = true;
       this.close();
+      Promise.resolve(this.#onSave?.(clip)).finally(() => {
+        this.#saving = false;
+      });
     });
 
     this.#bindTimeline(root.querySelector('[data-timeline]'));

@@ -40,8 +40,19 @@ function isEditableTarget(target) {
 }
 
 const editor = new ClipEditor({
-  onSave(_clip) {
-    // TODO: envoi Telegram / share sheet
+  async onSave(clip) {
+    clippyLog('content', 'onSave', {
+      start: clip.start,
+      end: clip.end,
+    });
+
+    try {
+      await startClipRecording(clip);
+      clippyLog('content', 'onSave:done', { start: clip.start, end: clip.end });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[Clippy] enregistrement échoué — ${message}`);
+    }
   },
 });
 
@@ -53,9 +64,13 @@ async function loadShortcut() {
   activeShortcut = parseShortcut(shortcut) ?? parseShortcut(DEFAULT_SHORTCUT);
 }
 
-async function openClipEditor() {
+async function openClipEditor(options = {}) {
+  clippyLog('content', 'openClipEditor', options);
   const video = await waitForVideo();
-  if (!video) return;
+  if (!video) {
+    clippyLog('content', 'openClipEditor:no_video');
+    return;
+  }
 
   const { clipDuration = DEFAULT_CLIP_DURATION } = await chrome.storage.sync.get('clipDuration');
   editor.open(video, clipDuration);
@@ -67,7 +82,7 @@ function onKeyDown(e) {
 
   e.preventDefault();
   e.stopPropagation();
-  openClipEditor();
+  openClipEditor({ from: 'page_shortcut' });
 }
 
 loadShortcut();
@@ -80,9 +95,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === 'OPEN_CLIP_EDITOR') {
-    openClipEditor();
+    openClipEditor({ from: 'extension' });
   }
 });
 
 document.addEventListener('keydown', onKeyDown, true);
-injectPlayerButton(() => openClipEditor());
+injectPlayerButton(() => openClipEditor({ from: 'player_button' }));

@@ -4,19 +4,32 @@
   "description": "Clippe rapidement des passages YouTube",
   "version": "0.1.0",
   "permissions": ["storage", "tabs"],
-  "host_permissions": ["*://www.youtube.com/*"],
+  "host_permissions": ["*://*.youtube.com/*"],
   "action": {
-    "default_popup": "popup/popup.html",
-    "default_title": "Clippy"
+    "default_title": "Clippy — ouvrir l'éditeur",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {
       "matches": ["*://www.youtube.com/watch*"],
       "js": [
+        "lib/log.js",
         "lib/time.js",
+        "lib/filename.js",
+        "lib/recorder-mime.js",
+        "lib/video-frame.js",
         "lib/shortcut.js",
         "content/clip-editor.js",
         "content/player-button.js",
+        "content/record.js",
         "content/content.js"
       ],
       "css": ["content/content.css"],
@@ -29,8 +42,8 @@
   "commands": {
     "open-clip-editor": {
       "suggested_key": {
-        "default": "Alt+Shift+C",
-        "mac": "Alt+Shift+C"
+        "default": "Ctrl+Shift+C",
+        "mac": "MacCtrl+Shift+C"
       },
       "description": "Ouvrir l'éditeur Clippy"
     }
