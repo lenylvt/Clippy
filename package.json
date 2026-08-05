@@ -1,21 +1,24 @@
 {
   "name": "clippy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "vp test",
-    "vendor:ffmpeg": "node scripts/vendor-ffmpeg.mjs",
-    "postinstall": "node scripts/vendor-ffmpeg.mjs",
-    "worker:dev": "wrangler dev --config worker/wrangler.jsonc",
-    "worker:deploy": "wrangler deploy --config worker/wrangler.jsonc",
-    "worker:migrate": "wrangler d1 migrations apply clippy --local --config worker/wrangler.jsonc"
+    "worker:dev": "wrangler dev --config apps/worker/wrangler.jsonc",
+    "worker:deploy": "wrangler deploy --config apps/worker/wrangler.jsonc",
+    "worker:migrate": "wrangler d1 migrations apply clippy --remote --config apps/worker/wrangler.jsonc",
+    "worker:migrate:local": "wrangler d1 migrations apply clippy --local --config apps/worker/wrangler.jsonc",
+    "worker:secret": "wrangler secret put CONTAINER_SECRET --config apps/worker/wrangler.jsonc",
+    "ext:pack": "cd apps/extension && zip -r ../../clippy-extension.zip . -x '*.test.js' -x '*/.DS_Store'",
+    "bench:job": "node scripts/bench-job.mjs",
+    "test:py": "cd apps/worker/container && python3 test_download.py"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260706.1",
-    "@ffmpeg/core": "0.12.6",
-    "@ffmpeg/ffmpeg": "0.12.10",
-    "@ffmpeg/util": "0.12.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4",
     "wrangler": "^4.69.0"

@@ -1,0 +1,83 @@
+.wrap {
+  max-width: 28rem;
+  margin: 2rem auto;
+  padding: 0 1.25rem 3rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color: #111;
+}
+
+h1 {
+  font-size: 1.75rem;
+  margin: 0 0 0.35rem;
+  text-wrap: balance;
+}
+
+.lede {
+  color: #555;
+  margin: 0 0 1.5rem;
+  text-wrap: pretty;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1.1rem;
+}
+
+.field span {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+input {
+  font: inherit;
+  font-size: 16px;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+input.invalid {
+  border-color: #c0392b;
+}
+
+.error {
+  color: #c0392b;
+  font-size: 0.8rem;
+}
+
+.token {
+  display: block;
+  font-size: 0.75rem;
+  word-break: break-all;
+  padding: 0.5rem;
+  background: #f4f4f4;
+  border-radius: 8px;
+}
+
+.btn {
+  align-self: start;
+  margin-top: 0.35rem;
+  font: inherit;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.hint,
+.status {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+a {
+  color: #1a73e8;
+}

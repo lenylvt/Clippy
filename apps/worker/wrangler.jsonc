@@ -1,0 +1,59 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "clippy",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "r2_buckets": [
+    {
+      "binding": "CLIPS",
+      "bucket_name": "clippy-clips"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "clippy",
+      "database_id": "1d9c8f39-e352-4b2f-b1d6-2dd6959e9501",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
+  "containers": [
+    {
+      "class_name": "ClipContainer",
+      "image": "./Dockerfile",
+      "max_instances": 4,
+      "instance_type": "standard-3"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "class_name": "ClipContainer",
+        "name": "CLIP"
+      },
+      {
+        "class_name": "JobQueue",
+        "name": "JOB_QUEUE"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ClipProcessor"]
+    },
+    {
+      "tag": "v2",
+      "deleted_classes": ["ClipProcessor"]
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": ["ClipContainer", "JobQueue"]
+    }
+  ]
+}

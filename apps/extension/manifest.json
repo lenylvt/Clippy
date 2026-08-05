@@ -1,0 +1,62 @@
+{
+  "manifest_version": 3,
+  "name": "Clippy",
+  "description": "Clippe rapidement des passages YouTube",
+  "version": "0.2.0",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "http://localhost/*",
+    "https://*.workers.dev/*"
+  ],
+  "action": {
+    "default_title": "Clippy — réglages",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/watch*"],
+      "js": [
+        "lib/log.js",
+        "lib/config.js",
+        "lib/clip-constants.js",
+        "lib/time.js",
+        "lib/youtube.js",
+        "content/clip-queue.js",
+        "lib/status-badge.js",
+        "content/clip-editor.js",
+        "content/player-button.js",
+        "content/clip-client.js",
+        "content/content.js"
+      ],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "commands": {
+    "open-clip-editor": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+C",
+        "mac": "MacCtrl+Shift+C"
+      },
+      "description": "Ouvrir l'éditeur Clippy"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clippy — Réglages</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>Clippy</h1>
+      <p class="lede">Les clips sont traités sur Cloudflare (téléchargement, découpe, envoi).</p>
+
+      <label class="field">
+        <span>Durée de clip par défaut</span>
+        <input id="clip-duration" type="text" inputmode="numeric" autocomplete="off" />
+        <span id="duration-error" class="error" hidden>Durée invalide</span>
+      </label>
+
+      <label class="field">
+        <span>URL du worker</span>
+        <input id="worker-url" type="url" autocomplete="off" />
+        <span id="worker-error" class="error" hidden>URL invalide</span>
+      </label>
+
+      <div class="field">
+        <span>Token appareil</span>
+        <code id="device-token" class="token">…</code>
+        <button type="button" id="reset-token" class="btn">Régénérer</button>
+      </div>
+
+      <p class="hint">
+        Raccourci éditeur :
+        <a id="commands-link" href="#">chrome://extensions/shortcuts</a>
+      </p>
+      <p>
+        <a id="gallery-link" href="#" target="_blank" rel="noreferrer">Ouvrir la galerie</a>
+      </p>
+      <p id="status" class="status" aria-live="polite"></p>
+    </main>
+    <script src="../lib/config.js"></script>
+    <script src="../lib/clip-constants.js"></script>
+    <script src="../lib/time.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

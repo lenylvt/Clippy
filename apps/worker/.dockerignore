@@ -1,0 +1,10 @@
+.dev.vars
+.wrangler
+__pycache__
+*.pyc
+.Python
+*.md
+src
+migrations
+tsconfig.json
+wrangler.jsonc
