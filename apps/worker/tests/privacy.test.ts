@@ -11,10 +11,11 @@ describe('privacy page', () => {
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('lang="fr"');
     expect(html).toContain('Règles de confidentialité');
-    expect(html).toContain('clippy@lenylvt.cc');
+    expect(html).toContain('leny.levant95@icloud.com');
     expect(html).toContain('48 heures');
     expect(html).toContain('chrome.storage');
-    expect(html).toContain('https://clippy.runtimelayer.workers.dev/privacy');
+    expect(html).not.toContain('Chrome Web Store');
+    expect(html).not.toContain('URL de publication');
     expect(html).toContain('ne vendons pas');
   });
 

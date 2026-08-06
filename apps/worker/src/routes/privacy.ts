@@ -3,7 +3,7 @@
  * Served at GET /privacy — no auth.
  */
 
-const CONTACT_EMAIL = 'clippy@lenylvt.cc';
+const CONTACT_EMAIL = 'leny.levant95@icloud.com';
 const LAST_UPDATED = '6 août 2026';
 
 export const PRIVACY_PATH = '/privacy';
@@ -189,12 +189,8 @@ export function buildPrivacyHtml(): string {
     <h2>Modifications</h2>
     <p>
       Cette page peut être mise à jour. La date en tête indique la version en
-      vigueur. Pour le Chrome Web Store, l’URL de cette page est :
-      <code>/privacy</code> sur le domaine de l’API Clippy.
+      vigueur.
     </p>
-
-    <hr />
-    <p class="meta">URL de publication : <code>https://clippy.runtimelayer.workers.dev/privacy</code></p>
   </main>
 </body>
 </html>`;
