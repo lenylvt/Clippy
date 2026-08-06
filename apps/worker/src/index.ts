@@ -21,6 +21,7 @@ import {
   handlePairingStatus,
   handlePairingUnlink,
 } from './routes/pairing';
+import { handlePrivacy, PRIVACY_PATH } from './routes/privacy';
 import { requireContainerSecret, type Env } from './types';
 
 /** Durable Object class exports required by wrangler bindings. */
@@ -138,6 +139,10 @@ const handler: ExportedHandler<Env> = {
 
       if (request.method === 'GET' && (pathname === '/' || pathname === '/health')) {
         return jsonResponse(request, env, { ok: true, service: 'clippy', app: true });
+      }
+
+      if (request.method === 'GET' && pathname === PRIVACY_PATH) {
+        return handlePrivacy();
       }
 
       return jsonResponse(request, env, { ok: false, error: 'not_found' }, 404);
