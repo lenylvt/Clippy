@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Clippy",
   "description": "Clippe rapidement des passages YouTube",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
@@ -79,6 +79,5 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnsnyCwm9IcEH4E+OOsh9EF+RayZdJV1BWfB0qWLxzW+Le5nBy3CyrN7j0BrWZbwqwvZrT8Y2mCrpIKrQvXf+yljMBK9pdK+705LpZF/EBE+VPzm8EbiQigRXHARkSG5/kfo7Bfq7aIt/MdX6DEvxMMexEVOWyB7bgWkOa9z2OlUoLlX5TMU3zKmq+toBE0EH4aND60fotJ/H7VN5Vi/ad2ZU7ye/NjO3bKrw6wGsqG5z3cPrtMDebIWw5m/Z0N61GSvlrPc374rbSFmnykKBl8Tg9v4Adw5esi/MJNAzfC2uBJE13RK/dKca7v/O83mY6DPdapGCaDFkVRfQWHMOYwIDAQAB"
+  }
 }
