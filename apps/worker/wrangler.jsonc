@@ -1,5 +1,5 @@
 {
-  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "clippy",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-12",
@@ -17,6 +17,12 @@
       "database_name": "clippy",
       "database_id": "1d9c8f39-e352-4b2f-b1d6-2dd6959e9501",
       "migrations_dir": "migrations"
+    }
+  ],
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["clippy@lenylvt.cc"]
     }
   ],
   "triggers": {

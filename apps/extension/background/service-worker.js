@@ -2,7 +2,9 @@ import '../lib/log.js';
 import '../lib/config.js';
 import '../lib/clip-constants.js';
 import '../lib/youtube.js';
-import '../lib/jobs.js';
+import '../lib/stages.js';
+import '../lib/title.js';
+import '../lib/jobs-client.js';
 
 const DEVICE_TOKEN_KEY = 'deviceToken';
 
@@ -22,7 +24,7 @@ async function getOrCreateDeviceToken() {
 /**
  * @param {number | undefined} tabId
  * @param {string} label
- * @param {{ variant?: 'default' | 'error'; jobId?: string; stage?: string; progress?: number; galleryUrl?: string }} [options]
+ * @param {{ variant?: 'default' | 'error'; jobId?: string; stage?: string; progress?: number; url?: string }} [options]
  */
 async function notifyTabStatus(tabId, label, options = {}) {
   if (!tabId) return;
@@ -35,7 +37,7 @@ async function notifyTabStatus(tabId, label, options = {}) {
         label,
         progress: options.progress,
         variant: options.variant ?? 'default',
-        galleryUrl: options.galleryUrl,
+        url: options.url,
       });
       return;
     }
@@ -70,7 +72,7 @@ async function createClipJob(input) {
   const workerUrl = settings.workerUrl || globalThis.CLIPPY_DEFAULT_WORKER_URL;
   const deviceToken = await getOrCreateDeviceToken();
 
-  await notifyTabStatus(input.tabId, 'En file d’attente…', {
+  await notifyTabStatus(input.tabId, 'En attente', {
     jobId: input.jobId,
     stage: 'queued',
     progress: 0,
@@ -78,10 +80,20 @@ async function createClipJob(input) {
 
   const created = await globalThis.createServerJob(workerUrl, deviceToken, {
     videoId: input.videoId,
-    videoTitle: input.videoTitle || 'clip',
+    videoTitle: globalThis.cleanYoutubeTitle?.(input.videoTitle) || input.videoTitle || 'clip',
     youtubeUrl: input.youtubeUrl,
     clipStart: input.start,
     clipEnd: input.end,
+  }).catch(async (err) => {
+    if (err?.message === 'pairing_required') {
+      await notifyTabStatus(input.tabId, 'Relie l’app (réglages → QR)', {
+        jobId: input.jobId,
+        stage: 'error',
+        progress: 1,
+        variant: 'error',
+      });
+    }
+    throw err;
   });
 
   const serverJobId = created.jobId;
@@ -91,11 +103,11 @@ async function createClipJob(input) {
     deviceToken,
     serverJobId,
     (job) => {
-      void notifyTabStatus(input.tabId, globalThis.labelForStage(job.stage), {
+      void notifyTabStatus(input.tabId, globalThis.labelForStage(job.stage, job.progress), {
         jobId: input.jobId,
         stage: globalThis.stageToQueueStatus(job.stage),
         progress: job.progress,
-        galleryUrl: job.galleryUrl,
+        url: job.url,
       });
     },
   );
@@ -104,14 +116,13 @@ async function createClipJob(input) {
     jobId: input.jobId,
     stage: 'done',
     progress: 1,
-    galleryUrl: result.galleryUrl,
+    url: result.url,
   });
 
   return {
     ok: true,
     id: result.clipId,
     url: result.url,
-    galleryUrl: result.galleryUrl,
   };
 }
 

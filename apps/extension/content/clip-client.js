@@ -18,7 +18,11 @@ async function startClipJob(clip, options = {}) {
     throw new Error('missing_video_id');
   }
 
-  const title = document.title.replace(/\s*-\s*YouTube\s*$/i, '').trim();
+  const title = document.title
+    .replace(/\s*-\s*YouTube\s*$/i, '')
+    .replace(/^\(\d+\)\s+/, '')
+    .replace(/\s*\(\d+\)\s*$/, '')
+    .trim();
   const jobId = options.jobId;
 
   clippyLog('clip', 'start', { clip, videoId, jobId });
@@ -37,29 +41,33 @@ async function startClipJob(clip, options = {}) {
     throw new Error(result?.error ?? 'create_clip_failed');
   }
 
-  clippyLog('clip', 'done', { id: result.id, galleryUrl: result.galleryUrl, jobId });
+  clippyLog('clip', 'done', { id: result.id, url: result.url, jobId });
   return result;
 }
 
 /**
  * @param {HTMLVideoElement | null} video
+ * @param {string} [fallbackUrl]
  * @returns {string | undefined}
  */
-function captureVideoThumb(video) {
-  if (!video || video.readyState < 2) return undefined;
-  try {
-    const w = 160;
-    const h = Math.max(1, Math.round((video.videoHeight / video.videoWidth) * w)) || 90;
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return undefined;
-    ctx.drawImage(video, 0, 0, w, h);
-    return canvas.toDataURL('image/jpeg', 0.72);
-  } catch {
-    return undefined;
+function captureVideoThumb(video, fallbackUrl) {
+  if (video && video.readyState >= 2 && video.videoWidth > 0) {
+    try {
+      const w = 160;
+      const h = Math.max(1, Math.round((video.videoHeight / video.videoWidth) * w)) || 90;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, w, h);
+        return canvas.toDataURL('image/jpeg', 0.72);
+      }
+    } catch {
+      /* canvas often tainted on YouTube — fall through */
+    }
   }
+  return fallbackUrl || undefined;
 }
 
 globalThis.startClipJob = startClipJob;

@@ -1,0 +1,22 @@
+# Keep EAS upload lean; monorepo root is uploaded for workspaces.
+**/node_modules/
+.git/
+.wrangler/
+.dev.vars
+*.zip
+.DS_Store
+.vite/
+dist/
+__pycache__/
+*.pyc
+
+# Not needed for the iOS app build
+apps/extension/
+apps/worker/
+apps/mobile/.expo/
+apps/mobile/ios/
+apps/mobile/android/
+
+# Local caches / secrets
+**/.env
+**/.env.*

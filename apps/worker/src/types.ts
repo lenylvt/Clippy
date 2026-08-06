@@ -1,4 +1,7 @@
+import type { Clip, JobPublic } from '@clippy/shared/types';
 import type { JobStage } from './constants';
+
+export type { Clip, JobPublic };
 
 export type ClipRow = {
   id: string;
@@ -10,27 +13,8 @@ export type ClipRow = {
   clip_end: number;
   created_at: number;
   expires_at: number;
-};
-
-export type Clip = {
-  id: string;
-  videoId: string;
-  videoTitle: string;
-  youtubeUrl: string;
-  clipStart: number;
-  clipEnd: number;
-  createdAt: number;
-  expiresAt: number;
-  url: string;
-  extension: 'mp4' | 'webm';
-};
-
-export type VideoGroup = {
-  videoId: string;
-  videoTitle: string;
-  youtubeUrl: string;
-  latestAt: number;
-  clips: Clip[];
+  user_id: string | null;
+  video_duration: number | null;
 };
 
 export type JobRow = {
@@ -46,28 +30,36 @@ export type JobRow = {
   clip_id: string | null;
   error: string | null;
   device_token: string;
+  user_id: string | null;
   slot: number | null;
+  r2_key: string | null;
   created_at: number;
   updated_at: number;
   expires_at: number;
 };
 
-export type JobPublic = {
+export type UserRow = {
   id: string;
-  status: string;
-  stage: string;
-  progress: number;
-  videoId: string;
-  videoTitle: string;
-  youtubeUrl: string;
-  clipStart: number;
-  clipEnd: number;
-  clipId: string | null;
-  error: string | null;
-  createdAt: number;
-  updatedAt: number;
-  url?: string;
-  galleryUrl?: string;
+  email: string;
+  created_at: number;
+};
+
+export type DeviceRow = {
+  device_token: string;
+  user_id: string | null;
+  label: string | null;
+  paired_at: number | null;
+  created_at: number;
+};
+
+export type SendEmail = {
+  send(message: {
+    to: string | { email: string; name?: string };
+    from: string | { email: string; name?: string };
+    subject: string;
+    html?: string;
+    text?: string;
+  }): Promise<{ messageId: string }>;
 };
 
 export type Env = {
@@ -76,4 +68,9 @@ export type Env = {
   CLIP: DurableObjectNamespace;
   JOB_QUEUE: DurableObjectNamespace;
   CONTAINER_SECRET: string;
+  EMAIL?: SendEmail;
+  /** Optional R2 S3 API credentials for container→R2 direct PUT. */
+  R2_ACCOUNT_ID?: string;
+  R2_ACCESS_KEY_ID?: string;
+  R2_SECRET_ACCESS_KEY?: string;
 };

@@ -1,0 +1,17 @@
+{
+  "name": "@clippy/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./title": "./src/title.ts",
+    "./time": "./src/time.ts",
+    "./youtube": "./src/youtube.ts",
+    "./pairing": "./src/pairing.ts",
+    "./groupClips": "./src/groupClips.ts",
+    "./stages": "./src/stages.ts",
+    "./clipLimits": "./src/clipLimits.ts",
+    "./types": "./src/types.ts",
+    "./validateJob": "./src/validateJob.ts"
+  }
+}

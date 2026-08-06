@@ -3,39 +3,62 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
     <title>Clippy — Réglages</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <main class="wrap">
       <h1>Clippy</h1>
-      <p class="lede">Les clips sont traités sur Cloudflare (téléchargement, découpe, envoi).</p>
 
-      <label class="field">
-        <span>Durée de clip par défaut</span>
-        <input id="clip-duration" type="text" inputmode="numeric" autocomplete="off" />
-        <span id="duration-error" class="error" hidden>Durée invalide</span>
-      </label>
+      <section class="block" aria-labelledby="pair-title" data-state="loading">
+        <div class="row">
+          <div>
+            <h2 id="pair-title">App iPhone</h2>
+            <p id="pair-status" class="meta">Vérification…</p>
+          </div>
+          <span id="pair-badge" class="badge" hidden>Connecté</span>
+        </div>
 
-      <label class="field">
-        <span>URL du worker</span>
-        <input id="worker-url" type="url" autocomplete="off" />
-        <span id="worker-error" class="error" hidden>URL invalide</span>
-      </label>
+        <div id="pair-qr-wrap" class="qr" hidden>
+          <img id="pair-qr" alt="QR de liaison" width="140" height="140" />
+        </div>
 
-      <div class="field">
-        <span>Token appareil</span>
-        <code id="device-token" class="token">…</code>
-        <button type="button" id="reset-token" class="btn">Régénérer</button>
-      </div>
+        <div class="actions">
+          <button type="button" id="pair-refresh" class="btn primary">Afficher le QR</button>
+          <button type="button" id="pair-unlink" class="btn" hidden>Délier</button>
+        </div>
+      </section>
 
-      <p class="hint">
-        Raccourci éditeur :
-        <a id="commands-link" href="#">chrome://extensions/shortcuts</a>
-      </p>
-      <p>
-        <a id="gallery-link" href="#" target="_blank" rel="noreferrer">Ouvrir la galerie</a>
-      </p>
+      <section class="block" aria-labelledby="clip-title">
+        <h2 id="clip-title">Clip</h2>
+        <label class="field">
+          <span>Durée par défaut</span>
+          <input id="clip-duration" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" />
+          <span id="duration-error" class="error" hidden>Durée invalide (max 10:00)</span>
+        </label>
+      </section>
+
+      <section class="block" aria-labelledby="shortcut-title">
+        <h2 id="shortcut-title">Raccourci éditeur</h2>
+        <p class="meta">Ouvre l’éditeur de clip sur YouTube.</p>
+        <p class="meta">Par défaut&nbsp;: <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd></p>
+        <ol class="steps">
+          <li>Ouvre les raccourcis Chrome en cliquant sur le bouton</li>
+          <li>Trouve <strong>Clippy</strong> → Ouvrir l’éditeur Clippy</li>
+          <li>Clique l’icône crayon et choisis ta combinaison</li>
+        </ol>
+        <button type="button" id="commands-link" class="btn">Modifier le raccourci</button>
+      </section>
+
+      <details class="block advanced">
+        <summary>Avancé</summary>
+        <p class="meta">
+          Identité locale de cet Chrome pour la liaison. À réinitialiser seulement si le QR ne se lie plus.
+        </p>
+        <button type="button" id="reset-token" class="btn danger">Réinitialiser l’identité</button>
+      </details>
+
       <p id="status" class="status" aria-live="polite"></p>
     </main>
     <script src="../lib/config.js"></script>

@@ -2,62 +2,138 @@ const DEFAULT_DURATION = 90;
 
 const durationInput = document.getElementById('clip-duration');
 const durationError = document.getElementById('duration-error');
-const workerInput = document.getElementById('worker-url');
-const workerError = document.getElementById('worker-error');
-const deviceTokenEl = document.getElementById('device-token');
 const resetTokenBtn = document.getElementById('reset-token');
 const commandsLink = document.getElementById('commands-link');
-const galleryLink = document.getElementById('gallery-link');
 const status = document.getElementById('status');
+const pairBlock = document.querySelector('.block[aria-labelledby="pair-title"]');
+const pairStatus = document.getElementById('pair-status');
+const pairBadge = document.getElementById('pair-badge');
+const pairQrWrap = document.getElementById('pair-qr-wrap');
+const pairQr = document.getElementById('pair-qr');
+const pairRefresh = document.getElementById('pair-refresh');
+const pairUnlink = document.getElementById('pair-unlink');
 
 function showStatus(message) {
   status.textContent = message;
   window.clearTimeout(showStatus._timer);
   showStatus._timer = window.setTimeout(() => {
     status.textContent = '';
-  }, 1500);
+  }, 1600);
+}
+
+/**
+ * @param {'loading' | 'paired' | 'unpaired' | 'error'} state
+ * @param {string} label
+ */
+function setPairUi(state, label) {
+  pairBlock?.setAttribute('data-state', state);
+  pairStatus.textContent = label;
+  const paired = state === 'paired';
+  pairBadge.hidden = !paired;
+  pairUnlink.hidden = !paired;
+  if (paired) {
+    pairQrWrap.hidden = true;
+    pairQr.removeAttribute('src');
+    pairRefresh.hidden = true;
+  } else {
+    pairRefresh.hidden = false;
+    pairRefresh.textContent = 'Afficher le QR';
+  }
+}
+
+async function getWorkerUrl() {
+  const { workerUrl = globalThis.CLIPPY_DEFAULT_WORKER_URL } = await chrome.storage.sync.get(['workerUrl']);
+  return workerUrl || globalThis.CLIPPY_DEFAULT_WORKER_URL;
 }
 
 async function loadSettings() {
-  const {
-    clipDuration = DEFAULT_DURATION,
-    workerUrl = globalThis.CLIPPY_DEFAULT_WORKER_URL,
-  } = await chrome.storage.sync.get(['clipDuration', 'workerUrl']);
-
+  const { clipDuration = DEFAULT_DURATION } = await chrome.storage.sync.get(['clipDuration']);
   durationInput.value = formatDuration(clipDuration);
-  workerInput.value = workerUrl;
-  galleryLink.href = workerUrl;
-  galleryLink.hidden = !workerUrl;
+  await refreshPairingStatus();
+}
 
+async function refreshPairingStatus() {
+  const workerUrl = await getWorkerUrl();
   const tokenRes = await chrome.runtime.sendMessage({ type: 'GET_DEVICE_TOKEN' });
-  deviceTokenEl.textContent = tokenRes?.token ? `${tokenRes.token.slice(0, 12)}…` : '—';
-}
-
-function parseWorkerUrl(value) {
-  try {
-    const parsed = new URL(value.trim());
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
-    return parsed.origin;
-  } catch {
-    return null;
-  }
-}
-
-async function saveWorkerUrl() {
-  const parsed = parseWorkerUrl(workerInput.value);
-  if (!parsed) {
-    workerError.hidden = false;
-    workerInput.classList.add('invalid');
+  const token = tokenRes?.token;
+  if (!token) {
+    setPairUi('error', 'Identité locale manquante — réinitialise dans Avancé.');
     return;
   }
+  try {
+    const res = await fetch(`${workerUrl}/api/pairing/status`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (data?.paired) {
+      setPairUi('paired', 'Prêt à envoyer des clips.');
+    } else {
+      const qrOpen = !pairQrWrap.hidden && Boolean(pairQr.getAttribute('src'));
+      setPairUi('unpaired', 'Scanne le QR dans l’app pour lier cet Chrome.');
+      if (qrOpen) {
+        pairQrWrap.hidden = false;
+        pairRefresh.textContent = 'Rafraîchir le QR';
+      }
+    }
+  } catch {
+    setPairUi('error', 'Impossible de vérifier la liaison.');
+  }
+}
 
-  workerError.hidden = true;
-  workerInput.classList.remove('invalid');
-  workerInput.value = parsed;
-  await chrome.storage.sync.set({ workerUrl: parsed });
-  galleryLink.href = parsed;
-  galleryLink.hidden = false;
-  showStatus('Worker enregistré');
+async function showPairingQr() {
+  const workerUrl = await getWorkerUrl();
+  const tokenRes = await chrome.runtime.sendMessage({ type: 'GET_DEVICE_TOKEN' });
+  const token = tokenRes?.token;
+  if (!token) {
+    showStatus('Identité manquante');
+    return;
+  }
+  pairRefresh.disabled = true;
+  try {
+    const res = await fetch(`${workerUrl}/api/pairing/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      throw new Error(data?.error || 'pairing_failed');
+    }
+    pairQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=6&data=${encodeURIComponent(data.deepLink)}`;
+    pairQrWrap.hidden = false;
+    pairStatus.textContent = 'Scanne ce QR dans l’app (2 min).';
+    pairBlock?.setAttribute('data-state', 'unpaired');
+    pairBadge.hidden = true;
+    pairRefresh.textContent = 'Rafraîchir le QR';
+    showStatus('QR prêt');
+  } catch {
+    showStatus('Échec QR');
+  } finally {
+    pairRefresh.disabled = false;
+  }
+}
+
+async function unlinkPairing() {
+  const workerUrl = await getWorkerUrl();
+  const tokenRes = await chrome.runtime.sendMessage({ type: 'GET_DEVICE_TOKEN' });
+  const token = tokenRes?.token;
+  if (!token) return;
+  pairUnlink.disabled = true;
+  try {
+    const res = await fetch(`${workerUrl}/api/pairing/unlink`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.ok) throw new Error(data?.error || 'unlink_failed');
+    pairQrWrap.hidden = true;
+    pairQr.removeAttribute('src');
+    showStatus('Délié');
+    await refreshPairingStatus();
+  } catch {
+    showStatus('Échec déliaison');
+  } finally {
+    pairUnlink.disabled = false;
+  }
 }
 
 async function saveDuration() {
@@ -76,29 +152,18 @@ async function saveDuration() {
 }
 
 durationInput.addEventListener('change', saveDuration);
-workerInput.addEventListener('change', saveWorkerUrl);
-workerInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    saveWorkerUrl();
-  }
-});
-durationInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    saveDuration();
-  }
-});
-
 resetTokenBtn.addEventListener('click', async () => {
-  const res = await chrome.runtime.sendMessage({ type: 'RESET_DEVICE_TOKEN' });
-  deviceTokenEl.textContent = res?.token ? `${res.token.slice(0, 12)}…` : '—';
-  showStatus('Token régénéré');
+  await chrome.runtime.sendMessage({ type: 'RESET_DEVICE_TOKEN' });
+  pairQrWrap.hidden = true;
+  pairQr.removeAttribute('src');
+  showStatus('Identité réinitialisée');
+  await refreshPairingStatus();
 });
-
-commandsLink.addEventListener('click', (e) => {
-  e.preventDefault();
+pairRefresh.addEventListener('click', showPairingQr);
+pairUnlink.addEventListener('click', () => void unlinkPairing());
+commandsLink.addEventListener('click', () => {
   chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
 });
 
 loadSettings();
+setInterval(() => void refreshPairingStatus(), 5000);

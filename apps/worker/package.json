@@ -1,0 +1,22 @@
+{
+  "name": "clippy-worker",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.jsonc",
+    "deploy": "wrangler deploy --config wrangler.jsonc",
+    "migrate": "wrangler d1 migrations apply clippy --remote --config wrangler.jsonc",
+    "migrate:local": "wrangler d1 migrations apply clippy --local --config wrangler.jsonc",
+    "secret": "wrangler secret put CONTAINER_SECRET --config wrangler.jsonc"
+  },
+  "dependencies": {
+    "@clippy/shared": "file:../../packages/shared",
+    "@cloudflare/containers": "^0.3.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260706.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.69.0"
+  }
+}

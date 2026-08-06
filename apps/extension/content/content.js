@@ -32,7 +32,9 @@ function waitForVideo() {
  */
 async function enqueueClipJob(clip) {
   const video = getVideo();
-  const thumbUrl = captureVideoThumb(video);
+  const videoId = getYoutubeVideoId(window.location.href);
+  const ytThumb = videoId ? youtubeThumbUrl(videoId, 'mq') || undefined : undefined;
+  const thumbUrl = captureVideoThumb(video, ytThumb);
   const job = clippyQueue.enqueue({
     start: clip.start,
     end: clip.end,
@@ -44,7 +46,7 @@ async function enqueueClipJob(clip) {
   try {
     clippyQueue.update(job.id, {
       status: 'queued',
-      label: 'En file d’attente…',
+      label: 'En attente',
       progress: 0.02,
     });
 
@@ -52,17 +54,18 @@ async function enqueueClipJob(clip) {
 
     clippyQueue.update(job.id, {
       status: 'done',
-      label: 'Clip prêt',
+      label: 'Terminé',
       progress: 1,
-      galleryUrl: result.galleryUrl,
+      url: result.url,
     });
-    clippyLog('content', 'queue:done', { id: job.id, galleryUrl: result.galleryUrl });
+    clippyLog('content', 'queue:done', { id: job.id, url: result.url });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const label = message === 'pairing_required' ? 'Relie l’app (réglages → QR)' : 'Échec';
     clippyLog('content', 'queue:fail', { id: job.id, error: message });
     clippyQueue.update(job.id, {
       status: 'error',
-      label: 'Échec',
+      label,
       error: message,
       progress: 1,
     });
@@ -94,11 +97,11 @@ async function openClipEditor(options = {}) {
  *   label?: string;
  *   progress?: number;
  *   variant?: string;
- *   galleryUrl?: string;
+ *   url?: string;
  * }} message
  */
 function handleJobProgress(message) {
-  const { jobId, stage, label, progress, galleryUrl } = message;
+  const { jobId, stage, label, progress, url } = message;
   if (!jobId) {
     if (typeof label === 'string') {
       showStatusBadge(label, { variant: message.variant === 'error' ? 'error' : 'default' });
@@ -106,9 +109,10 @@ function handleJobProgress(message) {
     return;
   }
 
-  /** @type {'queued' | 'download' | 'crop' | 'upload' | 'done' | 'error' | undefined} */
+  /** @type {'queued' | 'preparing' | 'download' | 'crop' | 'upload' | 'done' | 'error' | undefined} */
   let status;
   if (stage === 'download') status = 'download';
+  else if (stage === 'preparing') status = 'preparing';
   else if (stage === 'crop') status = 'crop';
   else if (stage === 'upload') status = 'upload';
   else if (stage === 'done') status = 'done';
@@ -119,7 +123,7 @@ function handleJobProgress(message) {
     status,
     label: typeof label === 'string' ? label : undefined,
     progress: typeof progress === 'number' ? progress : undefined,
-    galleryUrl: typeof galleryUrl === 'string' ? galleryUrl : undefined,
+    url: typeof url === 'string' ? url : undefined,
   });
 }
 

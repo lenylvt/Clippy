@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { extractYoutubeVideoId, validateJobPayload } from '../src/validate';
+import { extractYoutubeVideoId } from '@clippy/shared/youtube';
+import { validateJobPayload } from '@clippy/shared/validateJob';
 
 describe('validateJobPayload', () => {
   it('accepte un payload valide', () => {

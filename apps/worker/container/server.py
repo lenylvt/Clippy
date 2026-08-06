@@ -1,7 +1,8 @@
-"""HTTP API: health + process (download ≤1080p + ffmpeg crop)."""
+"""HTTP API: health + process (NDJSON progress stream, optional R2 PUT)."""
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import shutil
 import tempfile
@@ -13,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from download import FORMAT_SELECTOR, MAX_HEIGHT, extract_video_id
+from progress_map import crop_progress, download_progress, upload_progress
 
 HOST = "0.0.0.0"
 PORT = 8080
@@ -38,25 +40,24 @@ def read_json_body(handler: BaseHTTPRequestHandler) -> dict:
     return json.loads(raw.decode("utf-8"))
 
 
-def report_stage(callback_base: str, secret: str, job_id: str, stage: str, progress: float) -> None:
-    if not callback_base or not secret or not job_id:
-        return
-    url = f"{callback_base.rstrip('/')}/api/internal/jobs/{job_id}"
-    payload = json.dumps({"stage": stage, "progress": progress}).encode("utf-8")
+def put_r2(upload_url: str, path: Path, on_progress) -> None:
+    data = path.read_bytes()
+    on_progress(0.0)
     req = urllib.request.Request(
-        url,
-        data=payload,
-        method="PATCH",
+        upload_url,
+        data=data,
+        method="PUT",
         headers={
-            "Content-Type": "application/json",
-            "X-Clippy-Internal": secret,
+            "Content-Type": "video/mp4",
+            "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
         },
     )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            resp.read()
-    except urllib.error.URLError as exc:
-        print(f"[dl] stage report failed: {exc}")
+    on_progress(0.35)
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        body = resp.read()
+        if resp.status >= 400:
+            raise RuntimeError(f"r2_put_http_{resp.status}: {body[:200]!r}")
+    on_progress(1.0)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -76,6 +77,7 @@ class Handler(BaseHTTPRequestHandler):
                     "service": "clippy-clip",
                     "max_height": MAX_HEIGHT,
                     "format_selector": FORMAT_SELECTOR,
+                    "protocol": "ndjson-v1",
                 },
             )
             return
@@ -97,8 +99,8 @@ class Handler(BaseHTTPRequestHandler):
         youtube_url = str(body.get("youtubeUrl") or "")
         start = float(body.get("start") or 0)
         end = float(body.get("end") or 0)
-        callback_base = str(body.get("callbackBase") or "")
-        secret = str(body.get("secret") or "")
+        upload_url = str(body.get("uploadUrl") or "").strip()
+        r2_key = str(body.get("r2Key") or "").strip()
 
         if not extract_video_id(youtube_url):
             json_response(self, 400, {"ok": False, "error": "url YouTube invalide"})
@@ -107,38 +109,134 @@ class Handler(BaseHTTPRequestHandler):
             json_response(self, 400, {"ok": False, "error": "range invalide"})
             return
 
+        # Stream NDJSON events so the Worker can write precise stage/% to D1.
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.send_header("X-Clippy-Protocol", "ndjson-v1")
+        self.send_header("X-Clippy-Job-Id", job_id)
+        self.end_headers()
+
+        last_emit = {"stage": "", "progress": -1.0}
+
+        def emit(payload: dict) -> None:
+            line = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+            self.wfile.write(line)
+            self.wfile.flush()
+
+        def emit_stage(stage: str, progress: float) -> None:
+            p = max(0.0, min(1.0, float(progress)))
+            # Skip tiny duplicates; always emit stage changes.
+            if (
+                stage == last_emit["stage"]
+                and abs(p - float(last_emit["progress"])) < 0.005
+                and p < 0.99
+            ):
+                return
+            last_emit["stage"] = stage
+            last_emit["progress"] = p
+            emit({"type": "stage", "stage": stage, "progress": round(p, 4)})
+            print(f"[dl] stage={stage} progress={p:.4f}")
+
         tmp = Path(tempfile.mkdtemp(prefix="clippy-job-"))
         try:
-            report_stage(callback_base, secret, job_id, "downloading", 0.1)
-            # process_clip does download then crop; report crop mid-way via wrapper
-            source_dir = tmp / "src"
-            from download import crop_clip, download_source
+            from download import crop_clip, download_source, fetch_video_duration
 
-            source = download_source(youtube_url, source_dir)
-            report_stage(callback_base, secret, job_id, "cropping", 0.55)
-            out_path = tmp / "clip.mp4"
-            crop_clip(source, start, end, out_path)
-            report_stage(callback_base, secret, job_id, "uploading", 0.85)
+            emit_stage("downloading", download_progress(0.0))
 
-            data = out_path.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "video/mp4")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("X-Clippy-Job-Id", job_id)
-            self.send_header("X-Clippy-Bytes", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            duration_future: concurrent.futures.Future | None = None
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            try:
+                duration_future = executor.submit(fetch_video_duration, youtube_url)
+
+                def on_dl_progress(pct: float) -> None:
+                    emit_stage("downloading", download_progress(pct))
+
+                source_dir = tmp / "src"
+                source, offset = download_source(
+                    youtube_url,
+                    source_dir,
+                    start,
+                    end,
+                    on_progress=on_dl_progress,
+                )
+                emit_stage("downloading", download_progress(1.0))
+
+                emit_stage("cropping", crop_progress(0.0))
+                out_path = tmp / "clip.mp4"
+                clip_len = end - start
+
+                def on_crop_progress(phase: float) -> None:
+                    emit_stage("cropping", crop_progress(phase))
+
+                crop_clip(source, offset, offset + clip_len, out_path, on_progress=on_crop_progress)
+                emit_stage("cropping", crop_progress(1.0))
+
+                video_duration = None
+                if duration_future is not None:
+                    try:
+                        video_duration = duration_future.result(timeout=5)
+                    except Exception as meta_exc:  # noqa: BLE001
+                        print(f"[dl] duration probe failed: {meta_exc}")
+
+                bytes_len = out_path.stat().st_size
+                if bytes_len < 1024:
+                    raise RuntimeError("empty_clip")
+
+                used_r2 = False
+                if upload_url and r2_key:
+                    emit_stage("uploading", upload_progress(0.0))
+                    try:
+
+                        def on_up(phase: float) -> None:
+                            emit_stage("uploading", upload_progress(phase))
+
+                        put_r2(upload_url, out_path, on_up)
+                        used_r2 = True
+                        emit(
+                            {
+                                "type": "done",
+                                "mode": "r2",
+                                "r2Key": r2_key,
+                                "bytes": bytes_len,
+                                "videoDuration": video_duration,
+                            }
+                        )
+                    except Exception as up_exc:  # noqa: BLE001
+                        print(f"[dl] r2 put failed, falling back to inline: {up_exc}")
+                        used_r2 = False
+
+                if not used_r2:
+                    emit_stage("uploading", upload_progress(0.0))
+                    data = out_path.read_bytes()
+                    emit_stage("uploading", upload_progress(1.0))
+                    # done line must be immediately followed by raw mp4 bytes (no more JSON).
+                    emit(
+                        {
+                            "type": "done",
+                            "mode": "inline",
+                            "bytes": len(data),
+                            "videoDuration": video_duration,
+                        }
+                    )
+                    self.wfile.write(data)
+                    self.wfile.flush()
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
         except Exception as exc:  # noqa: BLE001
             traceback.print_exc()
-            report_stage(callback_base, secret, job_id, "error", 1.0)
-            json_response(self, 500, {"ok": False, "error": str(exc)})
+            try:
+                emit({"type": "error", "error": str(exc)[:500]})
+            except Exception:  # noqa: BLE001
+                pass
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main() -> None:
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"clippy-clip listening on {HOST}:{PORT} (max_height={MAX_HEIGHT})")
+    print(f"clippy-clip listening on {HOST}:{PORT} (max_height={MAX_HEIGHT}, protocol=ndjson-v1)")
     server.serve_forever()
 
 

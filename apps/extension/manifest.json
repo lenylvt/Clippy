@@ -7,7 +7,8 @@
   "host_permissions": [
     "*://*.youtube.com/*",
     "http://localhost/*",
-    "https://*.workers.dev/*"
+    "https://*.workers.dev/*",
+    "https://api.qrserver.com/*"
   ],
   "action": {
     "default_title": "Clippy — réglages",
@@ -30,14 +31,27 @@
         "lib/clip-constants.js",
         "lib/time.js",
         "lib/youtube.js",
-        "content/clip-queue.js",
+        "lib/stages.js",
+        "lib/title.js",
+        "lib/jobs-client.js",
+        "content/queue/clip-queue.js",
         "lib/status-badge.js",
-        "content/clip-editor.js",
+        "content/editor/constants.js",
+        "content/editor/filmstrip-cache.js",
+        "content/editor/overlay-html.js",
+        "content/editor/player-layout.js",
+        "content/editor/frame-preview.js",
+        "content/editor/filmstrip.js",
+        "content/editor/playback.js",
+        "content/editor/render.js",
+        "content/editor/keys.js",
+        "content/editor/timeline.js",
+        "content/editor/ClipEditor.js",
         "content/player-button.js",
         "content/clip-client.js",
         "content/content.js"
       ],
-      "css": ["content/content.css"],
+      "css": ["content/styles/content.css"],
       "run_at": "document_idle"
     }
   ],

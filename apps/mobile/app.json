@@ -1,0 +1,69 @@
+{
+  "expo": {
+    "name": "Clippy",
+    "slug": "clippy",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "clippy",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "cc.lenylvt.clippy",
+      "appleTeamId": "DL4Y78QH78",
+      "icon": "./assets/Icon.icon",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scanner le QR de l’extension Chrome.",
+        "NSPhotoLibraryAddUsageDescription": "Enregistrer tes clips dans Photos.",
+        "NSPhotoLibraryUsageDescription": "Enregistrer tes clips dans Photos.",
+        "UIBackgroundModes": ["remote-notification"],
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIViewControllerBasedStatusBarAppearance": false,
+        "LSApplicationQueriesSchemes": ["googlegmail", "message"]
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scanner le QR de l’extension Chrome."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": []
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Enregistrer tes clips dans Photos.",
+          "savePhotosPermission": "Enregistrer tes clips dans Photos.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      "expo-video",
+      "expo-dev-client"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "apiUrl": "https://clippy.runtimelayer.workers.dev",
+      "eas": {
+        "projectId": "79c8ce57-a4bb-4002-bbd1-fed332e44100"
+      }
+    },
+    "owner": "lenylvt"
+  }
+}

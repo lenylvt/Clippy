@@ -14,3 +14,9 @@ describe('getYoutubeVideoId', () => {
     expect(getYoutubeVideoId('not-a-url')).toBe('');
   });
 });
+
+describe('youtubeThumbUrl', () => {
+  it('construit une miniature mq', () => {
+    expect(youtubeThumbUrl('DkCkIk3MkB8')).toBe('https://i.ytimg.com/vi/DkCkIk3MkB8/mqdefault.jpg');
+  });
+});
