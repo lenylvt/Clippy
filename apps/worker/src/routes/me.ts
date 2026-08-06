@@ -1,56 +1,77 @@
 import { requireSessionUser } from '../auth/otp';
+import { DEFAULT_CLIPS_PAGE_LIMIT } from '../constants';
 import { listClipsForUser, listActiveJobsForUser, listJobsForUser } from '../db/userJobs';
 import { rowToClip, rowToJob } from '../db/mappers';
 import { upsertPushToken } from '../db/push';
-import { getOrigin } from '../http/cors';
-import { jsonResponse } from '../http/responses';
+import { asOptionalString, readJsonObject } from '../http/body';
+import { workerOrigin } from '../http/cors';
+import { corsJsonFromResponse, errorResponse, jsonResponse } from '../http/responses';
+import { isExpoPushToken, isPushPlatform } from '../notify/jobEvent';
 import type { Env } from '../types';
+
+function parseLimit(raw: string | null, fallback: number): number {
+  if (raw == null || raw === '') return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.min(Math.floor(n), 100));
+}
 
 export async function handleMeClips(request: Request, env: Env) {
   const userOrRes = await requireSessionUser(request, env);
   if (userOrRes instanceof Response) {
-    return jsonResponse(request, await userOrRes.json(), userOrRes.status);
+    return corsJsonFromResponse(request, env, userOrRes);
   }
-  const origin = getOrigin(request);
-  const rows = await listClipsForUser(env, userOrRes.id);
-  return jsonResponse(request, {
+  const origin = workerOrigin(request);
+  const url = new URL(request.url);
+  const limit = parseLimit(url.searchParams.get('limit'), DEFAULT_CLIPS_PAGE_LIMIT);
+  const offset = Math.max(0, Math.floor(Number(url.searchParams.get('offset') ?? 0) || 0));
+  const rows = await listClipsForUser(env, userOrRes.id, { limit, offset });
+  const clips = await Promise.all(rows.map((row) => rowToClip(row, origin, env)));
+  return jsonResponse(request, env, {
     ok: true,
-    clips: rows.map((row) => rowToClip(row, origin)),
+    clips,
   });
 }
 
 export async function handleMeJobs(request: Request, env: Env) {
   const userOrRes = await requireSessionUser(request, env);
   if (userOrRes instanceof Response) {
-    return jsonResponse(request, await userOrRes.json(), userOrRes.status);
+    return corsJsonFromResponse(request, env, userOrRes);
   }
-  const origin = getOrigin(request);
+  const origin = workerOrigin(request);
   const url = new URL(request.url);
-  const activeOnly = url.searchParams.get('active') === '1';
+  const activeParam = url.searchParams.get('active');
+  const activeOnly = activeParam === '1' || activeParam === 'true' || activeParam === 'yes';
   const jobs = activeOnly
     ? await listActiveJobsForUser(env, userOrRes.id)
     : await listJobsForUser(env, userOrRes.id);
-  return jsonResponse(request, {
+  return jsonResponse(request, env, {
     ok: true,
-    jobs: jobs.map((j) => rowToJob(j, origin)),
+    jobs: await Promise.all(jobs.map((j) => rowToJob(j, origin, env))),
   });
 }
 
 export async function handleRegisterPush(request: Request, env: Env) {
   const userOrRes = await requireSessionUser(request, env);
   if (userOrRes instanceof Response) {
-    return jsonResponse(request, await userOrRes.json(), userOrRes.status);
+    return corsJsonFromResponse(request, env, userOrRes);
   }
-  let body: { token?: string; platform?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse(request, { ok: false, error: 'invalid_json' }, 400);
+  const parsed = await readJsonObject(request);
+  if (!parsed.ok) {
+    return errorResponse(request, env, parsed.error, 400);
   }
-  const token = String(body.token ?? '').trim();
+  const token = (asOptionalString(parsed.body.token) ?? '').trim();
   if (!token) {
-    return jsonResponse(request, { ok: false, error: 'missing_token' }, 400);
+    return errorResponse(request, env, 'missing_token', 400);
   }
-  await upsertPushToken(env, userOrRes.id, token, String(body.platform ?? 'ios'));
-  return jsonResponse(request, { ok: true });
+  if (!isExpoPushToken(token)) {
+    return errorResponse(request, env, 'invalid_token', 400);
+  }
+  const platformRaw = asOptionalString(parsed.body.platform);
+  const platform = (platformRaw ?? 'ios').trim().toLowerCase();
+  if (!isPushPlatform(platform)) {
+    return errorResponse(request, env, 'invalid_platform', 400);
+  }
+  await upsertPushToken(env, userOrRes.id, token, platform);
+  return jsonResponse(request, env, { ok: true });
 }

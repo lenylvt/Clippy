@@ -22,18 +22,39 @@
   "send_email": [
     {
       "name": "EMAIL",
+      // Must match OTP_FROM_EMAIL in src/constants.ts
       "allowed_sender_addresses": ["clippy@lenylvt.cc"]
     }
   ],
+  // Secrets (wrangler secret put … --config wrangler.jsonc):
+  //   CONTAINER_SECRET          — Worker↔container + /api/internal/*
+  //   SESSION_SECRET            — clip URL HMAC (+ OTP fallback)
+  //   OTP_PEPPER                — OTP HMAC pepper
+  //   R2_ACCESS_KEY_ID          — optional; container→R2 presigned PUT
+  //   R2_SECRET_ACCESS_KEY      — optional; container→R2 presigned PUT
+  //   R2_ACCOUNT_ID             — optional; container→R2 presigned PUT
+  //   EXPO_ACCESS_TOKEN         — optional; Expo push
+  // Keep MAX_CONTAINER_SLOTS in src/constants.ts equal to containers.max_instances below.
+  "vars": {
+    "PUBLIC_ORIGIN": "https://clippy.runtimelayer.workers.dev",
+    "PUBLIC_ORIGINS": "https://clippy.runtimelayer.workers.dev",
+    "EXTENSION_ID": "mdlffepdgjacjmgjjhjigieingacjpfn",
+    "R2_BUCKET": "clippy-clips"
+  },
   "triggers": {
-    "crons": ["0 * * * *"]
+    // */5: queue pump + idle container cleanup via JobQueue DO
+    // 0 * * *: expired/orphan clip purge (+ pump)
+    "crons": ["*/5 * * * *", "0 * * * *"]
   },
   "containers": [
     {
       "class_name": "ClipContainer",
       "image": "./Dockerfile",
+      // Keep in sync with MAX_CONTAINER_SLOTS in src/constants.ts
       "max_instances": 4,
-      "instance_type": "standard-3"
+      "instance_type": "standard-3",
+      // Keep in sync with CONTAINER_ROLLOUT_GRACE_S (≥ worst-case job)
+      "rollout_active_grace_period": 900
     }
   ],
   "durable_objects": {
@@ -48,6 +69,7 @@
       }
     ]
   },
+  // DO migration history is append-only — do not reorder or remove tags.
   "migrations": [
     {
       "tag": "v1",

@@ -1,7 +1,8 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Linking, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { claimPairing } from '../src/api/pairing';
 import { useAuth } from '../src/features/auth/auth';
@@ -10,77 +11,136 @@ import { useTheme } from '../src/features/theme/theme';
 import { BackButton } from '../src/components/ui/BackButton';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
+import { apiMessageFr } from '../src/lib/apiMessages';
+
+const MIN_CODE_LEN = 6;
 
 export default function ScanScreen() {
   const { token } = useAuth();
   const router = useRouter();
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const [manual, setManual] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const lockRef = useRef(false);
+  const backTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (backTimerRef.current) clearTimeout(backTimerRef.current);
+    };
+  }, []);
 
   const claim = async (raw: string) => {
-    if (!token || busy || done) return;
+    if (!token || lockRef.current || done) return;
     const code = extractPairingCode(raw);
-    if (!code) {
-      setError('Code invalide');
+    if (!code || code.length < MIN_CODE_LEN) {
+      setError('Code invalide (6 caractères minimum)');
       return;
     }
+    lockRef.current = true;
     setBusy(true);
     setError(null);
     try {
       await claimPairing(token, code);
+      if (!mountedRef.current) return;
       setDone(true);
-      setTimeout(() => router.back(), 600);
+      backTimerRef.current = setTimeout(() => {
+        if (mountedRef.current) router.back();
+      }, 600);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Échec de la liaison');
+      if (!mountedRef.current) return;
+      setError(apiMessageFr(e, 'Échec de la liaison'));
+      lockRef.current = false;
     } finally {
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   };
 
+  const denied = permission && !permission.granted && !permission.canAskAgain;
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: c.bg }]}>
+      <StatusBar style={dark ? 'light' : 'dark'} />
       <BackButton onPress={() => router.back()} label="Fermer" />
-      <Text style={[styles.title, { color: c.ink }]}>Lier Chrome</Text>
+      <Text style={[styles.title, { color: c.ink }]} accessibilityRole="header">
+        Lier Chrome
+      </Text>
       <Text style={[styles.hint, { color: c.muted }]}>
         Ouvre les options de l’extension Clippy, puis scanne le QR ou tape le code.
       </Text>
 
-      {!permission?.granted ? (
-        <PrimaryButton label="Autoriser la caméra" onPress={() => void requestPermission()} />
+      {done ? (
+        <View style={[styles.success, { backgroundColor: c.surfaceRaised, borderColor: c.line }]}>
+          <Text style={{ color: c.ink, fontSize: 17, fontWeight: '600' }}>Extension liée</Text>
+        </View>
+      ) : !permission?.granted ? (
+        <View style={{ gap: 10 }}>
+          {denied ? (
+            <>
+              <Text style={{ color: c.muted, fontSize: 14, lineHeight: 20 }}>
+                La caméra est refusée. Autorise-la dans Réglages, ou entre le code manuellement.
+              </Text>
+              <SecondaryButton
+                label="Ouvrir Réglages"
+                onPress={() => void Linking.openSettings()}
+              />
+            </>
+          ) : (
+            <PrimaryButton label="Autoriser la caméra" onPress={() => void requestPermission()} />
+          )}
+        </View>
       ) : (
         <View style={[styles.cameraWrap, { borderColor: c.line, backgroundColor: c.surface }]}>
           <CameraView
             style={StyleSheet.absoluteFill}
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-            onBarcodeScanned={done || busy ? undefined : ({ data }) => void claim(data)}
+            onBarcodeScanned={
+              done || busy || lockRef.current
+                ? undefined
+                : ({ data }) => void claim(data)
+            }
           />
         </View>
       )}
 
-      <Text style={[styles.or, { color: c.muted }]}>ou entre le code</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: c.surfaceRaised, color: c.ink, borderColor: c.line }]}
-        autoCapitalize="characters"
-        value={manual}
-        onChangeText={setManual}
-        placeholder="ABCDEF"
-        placeholderTextColor={c.muted}
-        editable={!busy && !done}
-      />
-      <PrimaryButton
-        label={done ? 'Lié ✓' : 'Lier'}
-        busy={busy}
-        disabled={done || manual.trim().length < 4}
-        onPress={() => void claim(manual)}
-      />
-      {error ? <Text style={[styles.error, { color: c.danger }]}>{error}</Text> : null}
-      <View style={{ marginTop: 12 }}>
-        <SecondaryButton label="Plus tard" onPress={() => router.back()} />
-      </View>
+      {!done ? (
+        <>
+          <Text style={[styles.or, { color: c.muted }]}>ou entre le code</Text>
+          <TextInput
+            style={[
+              styles.input,
+              { backgroundColor: c.surfaceRaised, color: c.ink, borderColor: c.line },
+            ]}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={12}
+            value={manual}
+            onChangeText={setManual}
+            placeholder="ABCDEF"
+            placeholderTextColor={c.muted}
+            editable={!busy && !done}
+            accessibilityLabel="Code de liaison"
+          />
+          <PrimaryButton
+            label="Lier"
+            busy={busy}
+            disabled={done || manual.trim().length < MIN_CODE_LEN}
+            onPress={() => void claim(manual)}
+          />
+        </>
+      ) : null}
+
+      {error ? (
+        <Text style={[styles.error, { color: c.danger }]} accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -95,6 +155,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 16,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  success: {
+    height: 120,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   or: { textAlign: 'center', fontSize: 13, marginBottom: 10, fontWeight: '500' },
   input: {

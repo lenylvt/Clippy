@@ -3,15 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "sideEffects": false,
+  "files": ["src"],
   "exports": {
-    "./title": "./src/title.ts",
-    "./time": "./src/time.ts",
-    "./youtube": "./src/youtube.ts",
-    "./pairing": "./src/pairing.ts",
-    "./groupClips": "./src/groupClips.ts",
-    "./stages": "./src/stages.ts",
     "./clipLimits": "./src/clipLimits.ts",
+    "./groupClips": "./src/groupClips.ts",
+    "./pairing": "./src/pairing.ts",
+    "./stages": "./src/stages.ts",
+    "./time": "./src/time.ts",
+    "./title": "./src/title.ts",
     "./types": "./src/types.ts",
-    "./validateJob": "./src/validateJob.ts"
+    "./validateJob": "./src/validateJob.ts",
+    "./youtube": "./src/youtube.ts"
   }
 }

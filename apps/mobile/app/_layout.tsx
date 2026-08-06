@@ -1,6 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from '../src/features/auth/auth';
 import { attachNotificationListeners, ensurePushRegistration } from '../src/features/notify/notifications';
 import { useTheme } from '../src/features/theme/theme';
@@ -11,20 +12,25 @@ function RootNavigator() {
   const { token, ready } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
+  const inAuth = segments[0] === 'sign-in' || segments.includes('sign-in' as never);
 
   useEffect(() => {
     if (!ready) return;
-    const inAuth = segments[0] === 'sign-in';
     if (!token && !inAuth) router.replace('/sign-in');
     else if (token && inAuth) router.replace('/');
-  }, [token, ready, segments, router]);
+  }, [token, ready, inAuth, router]);
 
   useEffect(() => {
     if (!token) return;
-    void ensurePushRegistration(token);
-    return attachNotificationListeners();
-  }, [token]);
+    void ensurePushRegistration(token).catch(() => undefined);
+    return attachNotificationListeners({
+      authToken: token,
+      onOpenClip: (clipId) => {
+        router.push(`/clip/${clipId}`);
+      },
+    });
+  }, [token, router]);
 
   if (!ready) {
     return (
@@ -37,9 +43,24 @@ function RootNavigator() {
           gap: 12,
         }}
       >
-        <ActivityIndicator color={c.ink} />
+        <StatusBar style={dark ? 'light' : 'dark'} />
+        <ActivityIndicator color={c.ink} accessibilityLabel="Chargement" />
         <Text style={{ color: c.muted, fontSize: 14 }}>Clippy</Text>
       </View>
+    );
+  }
+
+  // Do not mount the protected stack without a session (avoids flash / deep-link leaks).
+  if (!token) {
+    return (
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: c.bg },
+        }}
+      >
+        <Stack.Screen name="sign-in" />
+      </Stack>
     );
   }
 
@@ -51,7 +72,6 @@ function RootNavigator() {
       }}
     >
       <Stack.Screen name="index" />
-      <Stack.Screen name="sign-in" />
       <Stack.Screen name="scan" options={{ presentation: 'modal' }} />
       <Stack.Screen name="activity" />
       <Stack.Screen name="clip/[id]" />

@@ -1,33 +1,82 @@
-/** Parse `Range: bytes=start-end` (end optional). */
+/**
+ * Parse a single `Range: bytes=…` request.
+ *
+ * Supported forms:
+ * - `bytes=0-499` — closed interval
+ * - `bytes=500-` — open end (through last byte)
+ * - `bytes=-500` — suffix (last N bytes)
+ *
+ * Returns:
+ * - `{ ok: true, … }` when the range is satisfiable
+ * - `{ ok: false, reason: 'unsatisfiable' }` when syntactically valid but outside the resource (RFC 7233 → 416)
+ * - `null` when absent, malformed, multi-range, empty `bytes=-`, or `size <= 0`
+ */
+export type SatisfiableBytesRange = {
+  ok: true;
+  offset: number;
+  length: number;
+  start: number;
+  end: number;
+};
+
+export type UnsatisfiableBytesRange = {
+  ok: false;
+  reason: 'unsatisfiable';
+};
+
+export type BytesRangeResult = SatisfiableBytesRange | UnsatisfiableBytesRange;
+
 export function parseBytesRange(
   header: string | null,
   size: number,
-): { offset: number; length: number; start: number; end: number } | null {
+): BytesRangeResult | null {
   if (!header || size <= 0) return null;
-  const m = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
+
+  const trimmed = header.trim();
+  // Multi-range and non-bytes units are unsupported — treat as malformed.
+  if (/^bytes\s*=\s*.*,/i.test(trimmed)) return null;
+
+  const m = /^bytes\s*=\s*(\d*)\s*-\s*(\d*)$/i.exec(trimmed);
   if (!m) return null;
 
-  let start: number;
-  let end: number;
+  const startRaw = m[1]!;
+  const endRaw = m[2]!;
 
-  if (m[1] === '' && m[2] !== '') {
-    const suffix = Number(m[2]);
+  // `bytes=-` (both empty) is invalid — not a full-file open range.
+  if (startRaw === '' && endRaw === '') return null;
+
+  if (startRaw === '' && endRaw !== '') {
+    const suffix = Number(endRaw);
     if (!Number.isFinite(suffix) || suffix <= 0) return null;
-    start = Math.max(0, size - suffix);
-    end = size - 1;
-  } else {
-    start = Number(m[1]);
-    end = m[2] === '' ? size - 1 : Number(m[2]);
-    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-    if (start < 0 || start >= size) return null;
-    end = Math.min(end, size - 1);
-    if (end < start) return null;
+    if (size === 0) return { ok: false, reason: 'unsatisfiable' };
+    const start = Math.max(0, size - suffix);
+    const end = size - 1;
+    return {
+      ok: true,
+      offset: start,
+      length: end - start + 1,
+      start,
+      end,
+    };
   }
 
+  const start = Number(startRaw);
+  if (!Number.isFinite(start) || start < 0) return null;
+
+  if (start >= size) {
+    return { ok: false, reason: 'unsatisfiable' };
+  }
+
+  const end = endRaw === '' ? size - 1 : Number(endRaw);
+  if (!Number.isFinite(end)) return null;
+  if (endRaw !== '' && end < start) return null;
+
+  const clampedEnd = Math.min(end, size - 1);
   return {
+    ok: true,
     offset: start,
-    length: end - start + 1,
+    length: clampedEnd - start + 1,
     start,
-    end,
+    end: clampedEnd,
   };
 }

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useColorScheme } from 'react-native';
 
 const light = {
@@ -9,8 +10,10 @@ const light = {
   accent: '#141413',
   danger: '#D92D20',
   dangerSoft: 'rgba(217, 45, 32, 0.1)',
+  /** Hairline separators / card borders */
   line: 'rgba(20,20,19,0.08)',
   onAccent: '#FFFFFF',
+  /** Subtle image / control outline (~10% ink) */
   outline: 'rgba(0,0,0,0.1)',
 } as const;
 
@@ -28,25 +31,16 @@ const dark = {
   outline: 'rgba(255,255,255,0.1)',
 } as const;
 
-export type ThemeColors = {
-  bg: string;
-  surface: string;
-  surfaceRaised: string;
-  ink: string;
-  muted: string;
-  accent: string;
-  danger: string;
-  dangerSoft: string;
-  line: string;
-  onAccent: string;
-  outline: string;
-};
+export type ThemeColors = typeof light;
 
 export function useTheme() {
   const scheme = useColorScheme();
   const darkMode = scheme === 'dark';
-  return {
-    dark: darkMode,
-    c: darkMode ? dark : light,
-  };
+  return useMemo(
+    () => ({
+      dark: darkMode,
+      c: (darkMode ? dark : light) as ThemeColors,
+    }),
+    [darkMode],
+  );
 }

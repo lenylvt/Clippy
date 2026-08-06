@@ -12,7 +12,12 @@ function seekEditorVideo(video, duration, time) {
  */
 function toggleEditorPlayback(video) {
   if (video.paused) {
-    void video.play();
+    const playResult = video.play();
+    if (playResult && typeof playResult.catch === 'function') {
+      playResult.catch(() => {
+        clippyLog('editor', 'playback:play_rejected');
+      });
+    }
   } else {
     video.pause();
   }
@@ -24,6 +29,7 @@ function toggleEditorPlayback(video) {
  * @returns {() => void} unbind
  */
 function bindEditorPlayback(video, onTimeUpdate) {
+  // seeked covers scrub; timeupdate covers continuous play — both needed.
   video.addEventListener('timeupdate', onTimeUpdate);
   video.addEventListener('seeked', onTimeUpdate);
   return () => {

@@ -11,22 +11,23 @@
     <main class="wrap">
       <h1>Clippy</h1>
 
-      <section class="block" aria-labelledby="pair-title" data-state="loading">
+      <section class="block pair" aria-labelledby="pair-title" data-state="loading">
         <div class="row">
-          <div>
+          <div class="pair-copy">
             <h2 id="pair-title">App iPhone</h2>
-            <p id="pair-status" class="meta">Vérification…</p>
+            <p id="pair-status" class="meta" aria-live="polite">Vérification…</p>
           </div>
           <span id="pair-badge" class="badge" hidden>Connecté</span>
         </div>
 
         <div id="pair-qr-wrap" class="qr" hidden>
-          <img id="pair-qr" alt="QR de liaison" width="140" height="140" />
+          <canvas id="pair-qr-canvas" width="168" height="168" aria-label="QR de liaison"></canvas>
+          <p id="pair-expire" class="expire" hidden></p>
         </div>
 
         <div class="actions">
-          <button type="button" id="pair-refresh" class="btn primary">Afficher le QR</button>
-          <button type="button" id="pair-unlink" class="btn" hidden>Délier</button>
+          <button type="button" id="pair-refresh" class="btn primary" hidden disabled>Afficher le QR</button>
+          <button type="button" id="pair-unlink" class="btn danger" hidden>Délier</button>
         </div>
       </section>
 
@@ -35,14 +36,14 @@
         <label class="field">
           <span>Durée par défaut</span>
           <input id="clip-duration" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" />
-          <span id="duration-error" class="error" hidden>Durée invalide (max 10:00)</span>
+          <span id="duration-error" class="error" hidden>Durée invalide (0:03–5:00)</span>
         </label>
       </section>
 
       <section class="block" aria-labelledby="shortcut-title">
         <h2 id="shortcut-title">Raccourci éditeur</h2>
         <p class="meta">Ouvre l’éditeur de clip sur YouTube.</p>
-        <p class="meta">Par défaut&nbsp;: <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd></p>
+        <p class="meta">Par défaut&nbsp;: <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd> (sur Mac&nbsp;: Ctrl, pas ⌘)</p>
         <ol class="steps">
           <li>Ouvre les raccourcis Chrome en cliquant sur le bouton</li>
           <li>Trouve <strong>Clippy</strong> → Ouvrir l’éditeur Clippy</li>
@@ -53,9 +54,7 @@
 
       <details class="block advanced">
         <summary>Avancé</summary>
-        <p class="meta">
-          Identité locale de cet Chrome pour la liaison. À réinitialiser seulement si le QR ne se lie plus.
-        </p>
+        <p class="meta">Identité locale de liaison. À réinitialiser seulement si le QR ne se lie plus.</p>
         <button type="button" id="reset-token" class="btn danger">Réinitialiser l’identité</button>
       </details>
 
@@ -64,6 +63,8 @@
     <script src="../lib/config.js"></script>
     <script src="../lib/clip-constants.js"></script>
     <script src="../lib/time.js"></script>
+    <script src="../lib/qrcode.js"></script>
+    <script src="pairing-helpers.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

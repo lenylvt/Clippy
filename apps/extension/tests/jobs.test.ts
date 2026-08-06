@@ -12,6 +12,12 @@ describe('jobs stage mapping', () => {
     expect(stageToQueueStatus('error')).toBe('error');
   });
 
+  it('reste idempotent sur les statuts dock', () => {
+    expect(stageToQueueStatus('download')).toBe('download');
+    expect(stageToQueueStatus('crop')).toBe('crop');
+    expect(stageToQueueStatus('upload')).toBe('upload');
+  });
+
   it('affiche un statut clair sans pourcentage', () => {
     expect(labelForStage('downloading', 0.55)).toBe('Téléchargement…');
     expect(labelForStage('preparing')).toBe('Préparation…');

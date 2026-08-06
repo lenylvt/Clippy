@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
-import { queueBarWidth, stageToQueueStatus } from '@clippy/shared/stages';
-import type { ThemeColors } from '../features/theme/theme';
+import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from 'react-native';
+import { labelForStage, queueBarWidth, stageToQueueStatus } from '@clippy/shared/stages';
+import type { ThemeColors } from '../../features/theme/theme';
+import { FILL_OPACITY, trackStyles } from './track';
 
-/** Progress bar in the same slot as ClipTimeline (home row). */
+/** Barre de progression dans le même emplacement que ClipTimeline (file d’attente). */
 export function JobProgressBar({
   stage,
   progress,
@@ -15,35 +16,53 @@ export function JobProgressBar({
 }) {
   const status = stageToQueueStatus(stage);
   const widthPct = queueBarWidth(status, progress);
-  const anim = useRef(new Animated.Value(widthPct)).current;
-  const fill =
-    status === 'error' ? colors.danger : status === 'done' ? colors.ink : colors.ink;
+  const progressPct = Math.round(
+    Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) * 100 : 0,
+  );
+  const valueNow = status === 'done' || status === 'error' ? 100 : progressPct;
+  const anim = useRef(new Animated.Value(widthPct / 100)).current;
+  const fill = status === 'error' ? colors.danger : colors.ink;
 
   useEffect(() => {
-    Animated.timing(anim, {
-      toValue: widthPct,
-      duration: 280,
-      easing: Easing.bezier(0.22, 1, 0.36, 1),
-      useNativeDriver: false,
-    }).start();
+    let cancelled = false;
+    let animation: Animated.CompositeAnimation | null = null;
+
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (cancelled) return;
+      const toValue = widthPct / 100;
+      if (reduce) {
+        anim.setValue(toValue);
+        return;
+      }
+      animation = Animated.timing(anim, {
+        toValue,
+        duration: 280,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+        useNativeDriver: true,
+      });
+      animation.start();
+    });
+
+    return () => {
+      cancelled = true;
+      animation?.stop();
+    };
   }, [widthPct, anim]);
 
   return (
     <View
-      style={[styles.track, { backgroundColor: colors.line }]}
+      style={[trackStyles.track, { backgroundColor: colors.line }]}
       accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: 100, now: widthPct }}
+      accessibilityLabel={labelForStage(stage)}
+      accessibilityValue={{ min: 0, max: 100, now: valueNow }}
     >
       <Animated.View
         style={[
           styles.fill,
           {
             backgroundColor: fill,
-            opacity: status === 'error' ? 1 : 0.85,
-            width: anim.interpolate({
-              inputRange: [0, 100],
-              outputRange: ['0%', '100%'],
-            }),
+            opacity: status === 'error' ? 1 : FILL_OPACITY,
+            transform: [{ scaleX: anim }],
           },
         ]}
       />
@@ -52,13 +71,10 @@ export function JobProgressBar({
 }
 
 const styles = StyleSheet.create({
-  track: {
-    height: 4,
-    borderRadius: 99,
-    overflow: 'hidden',
-  },
   fill: {
     height: '100%',
+    width: '100%',
     borderRadius: 99,
+    transformOrigin: 'left center',
   },
 });

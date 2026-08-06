@@ -10,6 +10,11 @@ describe('formatDuration', () => {
     expect(formatDuration(0)).toBe('0:00');
     expect(formatDuration(3661)).toBe('1:01:01');
   });
+
+  it('ne produit pas NaN:NaN', () => {
+    expect(formatDuration(Number.NaN)).toBe('0:00');
+    expect(formatDuration(undefined)).toBe('0:00');
+  });
 });
 
 describe('parseDuration', () => {
@@ -41,6 +46,16 @@ describe('normalizeClip', () => {
 
   it('enforces minimum length', () => {
     expect(normalizeClip(10, 11, 600, 3)).toEqual({ start: 10, end: 13 });
+  });
+
+  it('enforces maximum length', () => {
+    expect(normalizeClip(0, 400, 600)).toEqual({ start: 0, end: 300 });
+  });
+
+  it('gère durée nulle / NaN', () => {
+    expect(normalizeClip(0, 10, 0)).toEqual({ start: 0, end: 0 });
+    expect(normalizeClip(Number.NaN, 10, 100)).toEqual({ start: 0, end: 10 });
+    expect(normalizeClip(0, Number.NaN, 100)).toEqual({ start: 0, end: 0 });
   });
 });
 

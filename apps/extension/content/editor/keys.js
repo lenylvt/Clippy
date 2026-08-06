@@ -4,17 +4,56 @@
  *   close: () => void;
  *   triggerSave: () => void;
  *   togglePlay: () => void;
- *   getClipStart: () => number;
- *   setClipStart: (v: number) => void;
- *   getClipEnd: () => number;
- *   setClipEnd: (v: number) => void;
- *   getDuration: () => number;
- *   getVideo: () => HTMLVideoElement | null;
- *   seekTo: (t: number) => void;
- *   render: () => void;
- *   showFramePreviewAt: (time: number, handle: 'left' | 'right' | null) => void;
+ *   removeActiveClip?: () => void;
  * }} EditorKeysApi
  */
+
+/** @param {EventTarget | null} target */
+function isEditableKeyTarget(target) {
+  if (!target || typeof target !== 'object') return false;
+
+  const tag =
+    typeof Element !== 'undefined' && target instanceof Element
+      ? target
+      : null;
+
+  if (tag) {
+    if (
+      typeof HTMLInputElement !== 'undefined' &&
+      tag instanceof HTMLInputElement &&
+      !tag.disabled &&
+      !tag.readOnly
+    ) {
+      return true;
+    }
+    if (
+      typeof HTMLTextAreaElement !== 'undefined' &&
+      tag instanceof HTMLTextAreaElement &&
+      !tag.disabled &&
+      !tag.readOnly
+    ) {
+      return true;
+    }
+    if (
+      typeof HTMLSelectElement !== 'undefined' &&
+      tag instanceof HTMLSelectElement &&
+      !tag.disabled
+    ) {
+      return true;
+    }
+    if (tag instanceof HTMLElement && tag.isContentEditable) return true;
+    return Boolean(tag.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'));
+  }
+
+  if (typeof /** @type {{ closest?: Function }} */ (target).closest === 'function') {
+    return Boolean(
+      /** @type {{ closest: (s: string) => unknown }} */ (target).closest(
+        'input, textarea, select, [contenteditable="true"], [contenteditable=""]',
+      ),
+    );
+  }
+  return false;
+}
 
 /**
  * @param {EditorKeysApi} api
@@ -24,6 +63,7 @@ function createEditorKeyHandlers(api) {
   const onKeyDown = (e) => {
     if (!api.isOpen()) return;
     if (e.isComposing) return;
+    if (isEditableKeyTarget(e.target)) return;
 
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -32,46 +72,28 @@ function createEditorKeyHandlers(api) {
       return;
     }
 
-    if (e.key === 'Enter' && !e.altKey) {
+    if (e.key === 'Enter' && !e.altKey && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       e.stopImmediatePropagation();
       api.triggerSave();
       return;
     }
 
-    if (e.key === ' ' || e.code === 'Space') {
+    if ((e.key === ' ' || e.code === 'Space') && !e.repeat) {
       e.preventDefault();
       e.stopImmediatePropagation();
       api.togglePlay();
       return;
     }
 
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    if ((e.key === 'Backspace' || e.key === 'Delete') && typeof api.removeActiveClip === 'function') {
       e.preventDefault();
       e.stopImmediatePropagation();
-      const step = e.shiftKey ? 1 : 0.2;
-      const delta = e.key === 'ArrowLeft' ? -step : step;
-      if (e.altKey) {
-        api.setClipStart(clamp(api.getClipStart() + delta, 0, api.getClipEnd() - globalThis.MIN_CLIP_SECONDS));
-        api.seekTo(api.getClipStart());
-      } else if (e.metaKey || e.ctrlKey) {
-        api.setClipEnd(clamp(api.getClipEnd() + delta, api.getClipStart() + globalThis.MIN_CLIP_SECONDS, api.getDuration()));
-        api.seekTo(api.getClipEnd());
-      } else {
-        api.seekTo((api.getVideo()?.currentTime ?? 0) + delta);
-      }
-      api.render();
-      api.showFramePreviewAt(api.getVideo()?.currentTime ?? 0, null);
+      api.removeActiveClip();
     }
   };
 
-  const onKeyUp = (e) => {
-    if (!api.isOpen()) return;
-    if (e.key === ' ' || e.code === 'Space') {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    }
-  };
+  const onKeyUp = () => {};
 
   return { onKeyDown, onKeyUp };
 }
@@ -90,5 +112,6 @@ function bindEditorKeys(api) {
   };
 }
 
+globalThis.isEditableKeyTarget = isEditableKeyTarget;
 globalThis.createEditorKeyHandlers = createEditorKeyHandlers;
 globalThis.bindEditorKeys = bindEditorKeys;

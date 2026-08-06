@@ -1,7 +1,9 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type DimensionValue } from 'react-native';
 import type { ThemeColors } from '../../features/theme/theme';
+import { clipTimelineLayout, pct } from './clipTimelineLayout';
+import { trackStyles } from './track';
 
-/** Mini timeline: filled segment = clip in video span. */
+/** Mini-timeline : segment rempli = clip dans la durée vidéo. */
 export function ClipTimeline({
   start,
   end,
@@ -13,12 +15,11 @@ export function ClipTimeline({
   spanEnd: number;
   colors: ThemeColors;
 }) {
-  const span = Math.max(spanEnd, end, 1);
-  const left = Math.min(1, Math.max(0, start / span));
-  const width = Math.min(1 - left, Math.max(0.02, (end - start) / span));
+  const { left, width } = clipTimelineLayout(start, end, spanEnd);
   return (
     <View
-      style={[styles.timelineTrack, { backgroundColor: colors.line }]}
+      style={[trackStyles.track, styles.timelineTrack, { backgroundColor: colors.line }]}
+      // iOS + Android : masquer la décoration aux lecteurs d’écran
       importantForAccessibility="no-hide-descendants"
       accessibilityElementsHidden
     >
@@ -26,8 +27,8 @@ export function ClipTimeline({
         style={[
           styles.timelineFill,
           {
-            left: `${left * 100}%`,
-            width: `${width * 100}%`,
+            left: pct(left) as DimensionValue,
+            width: pct(width) as DimensionValue,
             backgroundColor: colors.ink,
           },
         ]}
@@ -38,9 +39,6 @@ export function ClipTimeline({
 
 const styles = StyleSheet.create({
   timelineTrack: {
-    height: 4,
-    borderRadius: 99,
-    overflow: 'hidden',
     position: 'relative',
   },
   timelineFill: {

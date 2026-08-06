@@ -102,7 +102,9 @@ npm run worker:migrate
 npm run worker:deploy   # Docker requis pour image container ; sinon --containers-rollout=none
 ```
 
-Secrets : `CONTAINER_SECRET`. Binding email `EMAIL` (from `clippy@lenylvt.cc`).
+Secrets : `CONTAINER_SECRET`, `OTP_PEPPER` (ou `SESSION_SECRET` pour HMAC OTP + URLs clips signées), `EXPO_ACCESS_TOKEN` (push Expo). Binding email `EMAIL` (from `clippy@lenylvt.cc`).  
+Vars : `PUBLIC_ORIGIN` (URLs clips / push), `PUBLIC_ORIGINS` (CORS, origines absolues séparées par des virgules), `EXTENSION_ID` (ID Chrome). Localhost / `127.0.0.1` restent autorisés en CORS en dev.  
+Migrations D1 à appliquer : `0008` (auth/devices), `0009` (job attempts/origin), `0010` (indexes).
 
 ---
 

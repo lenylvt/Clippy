@@ -2,16 +2,20 @@
   "manifest_version": 3,
   "name": "Clippy",
   "description": "Clippe rapidement des passages YouTube",
-  "version": "0.2.0",
-  "permissions": ["storage", "tabs"],
+  "version": "0.2.5",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms"
+  ],
   "host_permissions": [
     "*://*.youtube.com/*",
     "http://localhost/*",
-    "https://*.workers.dev/*",
-    "https://api.qrserver.com/*"
+    "https://*.workers.dev/*"
   ],
   "action": {
-    "default_title": "Clippy — réglages",
+    "default_title": "Clippy \u2014 r\u00e9glages",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -24,34 +28,37 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://www.youtube.com/watch*"],
+      "matches": [
+        "*://www.youtube.com/watch*"
+      ],
       "js": [
         "lib/log.js",
-        "lib/config.js",
         "lib/clip-constants.js",
         "lib/time.js",
         "lib/youtube.js",
-        "lib/stages.js",
         "lib/title.js",
-        "lib/jobs-client.js",
+        "lib/stages.js",
         "content/queue/clip-queue.js",
         "lib/status-badge.js",
         "content/editor/constants.js",
         "content/editor/filmstrip-cache.js",
         "content/editor/overlay-html.js",
         "content/editor/player-layout.js",
-        "content/editor/frame-preview.js",
         "content/editor/filmstrip.js",
         "content/editor/playback.js",
+        "content/editor/editor-clips.js",
         "content/editor/render.js",
         "content/editor/keys.js",
+        "content/editor/timeline-clips.js",
         "content/editor/timeline.js",
         "content/editor/ClipEditor.js",
         "content/player-button.js",
         "content/clip-client.js",
         "content/content.js"
       ],
-      "css": ["content/styles/content.css"],
+      "css": [
+        "content/styles/content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -65,12 +72,13 @@
         "default": "Ctrl+Shift+C",
         "mac": "MacCtrl+Shift+C"
       },
-      "description": "Ouvrir l'éditeur Clippy"
+      "description": "Ouvrir l'\u00e9diteur Clippy"
     }
   },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnsnyCwm9IcEH4E+OOsh9EF+RayZdJV1BWfB0qWLxzW+Le5nBy3CyrN7j0BrWZbwqwvZrT8Y2mCrpIKrQvXf+yljMBK9pdK+705LpZF/EBE+VPzm8EbiQigRXHARkSG5/kfo7Bfq7aIt/MdX6DEvxMMexEVOWyB7bgWkOa9z2OlUoLlX5TMU3zKmq+toBE0EH4aND60fotJ/H7VN5Vi/ad2ZU7ye/NjO3bKrw6wGsqG5z3cPrtMDebIWw5m/Z0N61GSvlrPc374rbSFmnykKBl8Tg9v4Adw5esi/MJNAzfC2uBJE13RK/dKca7v/O83mY6DPdapGCaDFkVRfQWHMOYwIDAQAB"
 }

@@ -1,6 +1,9 @@
-import { DELETE_BATCH_SIZE, JOB_TTL_MS } from '../constants';
-import type { Clip, ClipRow, Env } from '../types';
-import { rowToClip } from './mappers';
+import { CLIP_TTL_MS, DELETE_BATCH_SIZE } from '../constants';
+import type { ClipRow, Env } from '../types';
+import { normalizePositiveDuration } from './mappers';
+
+const CLIP_COLUMNS = `id, video_id, video_title, youtube_url, r2_key,
+  clip_start, clip_end, created_at, expires_at, user_id, video_duration`;
 
 export async function insertClip(
   env: Env,
@@ -17,13 +20,10 @@ export async function insertClip(
   },
 ) {
   const now = Date.now();
-  const expiresAt = now + JOB_TTL_MS;
-  const videoDuration =
-    input.videoDuration != null && Number.isFinite(input.videoDuration) && input.videoDuration > 0
-      ? input.videoDuration
-      : null;
+  const expiresAt = now + CLIP_TTL_MS;
+  const videoDuration = normalizePositiveDuration(input.videoDuration ?? null);
 
-  await env.DB.prepare(
+  const inserted = await env.DB.prepare(
     `INSERT OR IGNORE INTO clips (
       id, video_id, video_title, youtube_url, r2_key,
       clip_start, clip_end, created_at, expires_at, user_id, video_duration
@@ -44,7 +44,7 @@ export async function insertClip(
     )
     .run();
 
-  if (videoDuration != null) {
+  if ((inserted.meta.changes ?? 0) > 0 && videoDuration != null) {
     await env.DB.prepare(
       `UPDATE clips SET video_duration = ?
        WHERE video_id = ? AND (video_duration IS NULL OR video_duration <= 0)`,
@@ -53,68 +53,93 @@ export async function insertClip(
       .run();
   }
 
-  return { createdAt: now, expiresAt };
-}
-
-export async function listClips(env: Env, origin: string): Promise<Clip[]> {
-  const { results } = await env.DB.prepare(
-    `SELECT * FROM clips WHERE expires_at > ? ORDER BY created_at DESC`,
-  )
-    .bind(Date.now())
-    .all<ClipRow>();
-
-  return (results ?? []).map((row) => rowToClip(row, origin));
+  return { createdAt: now, expiresAt, inserted: (inserted.meta.changes ?? 0) > 0 };
 }
 
 export async function getClipById(env: Env, id: string): Promise<ClipRow | null> {
-  return env.DB.prepare(`SELECT * FROM clips WHERE id = ? AND expires_at > ?`)
+  return env.DB.prepare(`SELECT ${CLIP_COLUMNS} FROM clips WHERE id = ? AND expires_at > ?`)
     .bind(id, Date.now())
     .first<ClipRow>();
 }
 
-export async function deleteClipById(env: Env, id: string) {
-  const clip = await getClipById(env, id);
-  if (!clip) return false;
-
-  await env.CLIPS.delete(clip.r2_key);
-  await env.DB.prepare(`DELETE FROM clips WHERE id = ?`).bind(id).run();
+/**
+ * Owner-scoped delete. Ownership is enforced in WHERE (not only at the route).
+ * Expired rows remain deletable by the owner.
+ */
+export async function deleteClipById(env: Env, id: string, userId: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `DELETE FROM clips WHERE id = ? AND user_id = ? RETURNING r2_key`,
+  )
+    .bind(id, userId)
+    .first<{ r2_key: string }>();
+  if (!row) return false;
+  try {
+    await env.CLIPS.delete(row.r2_key);
+  } catch (error) {
+    console.error('R2 delete after clip row removal failed', id, error);
+  }
   return true;
 }
 
-export async function deleteOrphanClips(env: Env): Promise<number> {
-  const { results } = await env.DB.prepare(
-    `SELECT id, r2_key FROM clips WHERE user_id IS NULL`,
-  ).all<{ id: string; r2_key: string }>();
-
-  const rows = results ?? [];
+async function deleteClipRows(
+  env: Env,
+  rows: Array<{ id: string; r2_key: string }>,
+): Promise<number> {
+  let deleted = 0;
   for (let index = 0; index < rows.length; index += DELETE_BATCH_SIZE) {
     const batch = rows.slice(index, index + DELETE_BATCH_SIZE);
     await Promise.all(
       batch.map(async (row) => {
-        await env.CLIPS.delete(row.r2_key);
-        await env.DB.prepare(`DELETE FROM clips WHERE id = ?`).bind(row.id).run();
+        try {
+          await env.CLIPS.delete(row.r2_key);
+          const result = await env.DB.prepare(`DELETE FROM clips WHERE id = ?`).bind(row.id).run();
+          if ((result.meta.changes ?? 0) > 0) deleted += 1;
+        } catch (error) {
+          console.error('clip cleanup row failed', row.id, error);
+        }
       }),
     );
   }
-  return rows.length;
+  return deleted;
 }
 
-export async function deleteExpiredClips(env: Env) {
-  const { results } = await env.DB.prepare(`SELECT id, r2_key FROM clips WHERE expires_at <= ?`)
-    .bind(Date.now())
-    .all<{ id: string; r2_key: string }>();
-
-  const rows = results ?? [];
-
-  for (let index = 0; index < rows.length; index += DELETE_BATCH_SIZE) {
-    const batch = rows.slice(index, index + DELETE_BATCH_SIZE);
-    await Promise.all(
-      batch.map(async (row) => {
-        await env.CLIPS.delete(row.r2_key);
-        await env.DB.prepare(`DELETE FROM clips WHERE id = ?`).bind(row.id).run();
-      }),
-    );
+/**
+ * Purge anonymous clips that are already expired — never wipe fresh orphans still in TTL.
+ * Bounded batches to stay within D1 response limits.
+ */
+export async function deleteOrphanClips(env: Env): Promise<number> {
+  const now = Date.now();
+  let total = 0;
+  for (;;) {
+    const { results } = await env.DB.prepare(
+      `SELECT id, r2_key FROM clips
+       WHERE user_id IS NULL AND expires_at <= ?
+       ORDER BY expires_at ASC
+       LIMIT ?`,
+    )
+      .bind(now, DELETE_BATCH_SIZE * 5)
+      .all<{ id: string; r2_key: string }>();
+    const rows = results ?? [];
+    if (rows.length === 0) break;
+    total += await deleteClipRows(env, rows);
+    if (rows.length < DELETE_BATCH_SIZE * 5) break;
   }
+  return total;
+}
 
-  return rows.length;
+export async function deleteExpiredClips(env: Env): Promise<number> {
+  const now = Date.now();
+  let total = 0;
+  for (;;) {
+    const { results } = await env.DB.prepare(
+      `SELECT id, r2_key FROM clips WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT ?`,
+    )
+      .bind(now, DELETE_BATCH_SIZE * 5)
+      .all<{ id: string; r2_key: string }>();
+    const rows = results ?? [];
+    if (rows.length === 0) break;
+    total += await deleteClipRows(env, rows);
+    if (rows.length < DELETE_BATCH_SIZE * 5) break;
+  }
+  return total;
 }

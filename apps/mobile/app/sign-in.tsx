@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Linking,
@@ -15,6 +15,10 @@ import { useAuth } from '../src/features/auth/auth';
 import { useTheme } from '../src/features/theme/theme';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
+import { apiMessageFr } from '../src/lib/apiMessages';
+import { isValidEmail } from '../src/lib/email';
+
+const RESEND_COOLDOWN_S = 45;
 
 async function openMailApp() {
   const candidates =
@@ -23,6 +27,8 @@ async function openMailApp() {
       : ['googlegmail://', 'mailto:'];
   for (const url of candidates) {
     try {
+      const can = await Linking.canOpenURL(url).catch(() => false);
+      if (!can && url !== 'mailto:') continue;
       await Linking.openURL(url);
       return;
     } catch {
@@ -39,32 +45,75 @@ export default function SignInScreen() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+  const codeRef = useRef<TextInput>(null);
+  const cooldownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+    };
+  }, []);
+
+  const startCooldown = () => {
+    setCooldown(RESEND_COOLDOWN_S);
+    if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+    cooldownTimer.current = setInterval(() => {
+      setCooldown((s) => {
+        if (s <= 1) {
+          if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+          cooldownTimer.current = null;
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  };
 
   const sendCode = async () => {
+    const trimmed = email.trim();
+    if (!isValidEmail(trimmed)) {
+      setError('Adresse e-mail invalide.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await requestOtp(email.trim());
+      await requestOtp(trimmed);
       setSent(true);
+      startCooldown();
+      setTimeout(() => codeRef.current?.focus(), 100);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      setError(apiMessageFr(e, 'Impossible d’envoyer le code'));
     } finally {
       setBusy(false);
     }
   };
 
-  const verify = async () => {
+  const verify = async (overrideCode?: string) => {
+    const trimmedEmail = email.trim();
+    const trimmedCode = (overrideCode ?? code).trim();
+    if (trimmedCode.length !== 6) return;
     setBusy(true);
     setError(null);
     try {
-      const res = await verifyOtp(email.trim(), code.trim());
-      await setSession(res.token, res.user.email);
+      const res = await verifyOtp(trimmedEmail, trimmedCode);
+      await setSession(res.token, res.user.email, res.user.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Code incorrect');
+      setError(apiMessageFr(e, 'Code incorrect'));
     } finally {
       setBusy(false);
     }
   };
+
+  const resetEmail = () => {
+    setSent(false);
+    setCode('');
+    setError(null);
+  };
+
+  const emailOk = isValidEmail(email);
+  const canResend = sent && cooldown === 0 && !busy;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: c.bg }]}>
@@ -72,10 +121,13 @@ export default function SignInScreen() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
       >
         <View style={styles.inner}>
           <View style={styles.hero}>
-            <Text style={[styles.brand, { color: c.ink }]}>Clippy</Text>
+            <Text style={[styles.brand, { color: c.ink }]} accessibilityRole="header">
+              Clippy
+            </Text>
             <Text style={[styles.tagline, { color: c.muted }]}>
               {sent
                 ? 'Entre le code reçu par e-mail.'
@@ -92,11 +144,16 @@ export default function SignInScreen() {
               keyboardType="email-address"
               textContentType="emailAddress"
               autoComplete="email"
+              returnKeyType={sent ? 'done' : 'send'}
               value={email}
               onChangeText={setEmail}
+              onSubmitEditing={() => {
+                if (!sent && emailOk) void sendCode();
+              }}
               placeholder="toi@exemple.com"
               placeholderTextColor={c.muted}
-              editable={!busy}
+              editable={!busy && !sent}
+              accessibilityLabel="Adresse e-mail"
             />
 
             {sent ? (
@@ -105,6 +162,7 @@ export default function SignInScreen() {
                   Code à 6 chiffres
                 </Text>
                 <TextInput
+                  ref={codeRef}
                   style={[
                     styles.input,
                     styles.code,
@@ -112,12 +170,18 @@ export default function SignInScreen() {
                   ]}
                   keyboardType="number-pad"
                   textContentType="oneTimeCode"
+                  autoComplete={Platform.OS === 'android' ? 'sms-otp' : 'one-time-code'}
                   maxLength={6}
                   value={code}
-                  onChangeText={setCode}
+                  onChangeText={(v) => {
+                    const next = v.replace(/\D/g, '').slice(0, 6);
+                    setCode(next);
+                    if (next.length === 6) void verify(next);
+                  }}
                   placeholder="000000"
                   placeholderTextColor={c.muted}
                   editable={!busy}
+                  accessibilityLabel="Code à 6 chiffres"
                 />
               </>
             ) : null}
@@ -126,21 +190,41 @@ export default function SignInScreen() {
               <PrimaryButton
                 label={sent ? 'Se connecter' : 'Recevoir un code'}
                 busy={busy}
-                disabled={!sent ? email.trim().length < 5 : code.trim().length !== 6}
+                disabled={!sent ? !emailOk : code.trim().length !== 6}
                 onPress={() => void (sent ? verify() : sendCode())}
               />
 
               {sent ? (
-                <SecondaryButton
-                  label="Ouvrir Mail"
-                  compact
-                  onPress={() => void openMailApp()}
-                />
+                <>
+                  <SecondaryButton
+                    label={
+                      cooldown > 0
+                        ? `Renvoyer le code (${cooldown}s)`
+                        : 'Renvoyer le code'
+                    }
+                    compact
+                    disabled={!canResend}
+                    onPress={() => void sendCode()}
+                  />
+                  <SecondaryButton label="Modifier l’e-mail" compact onPress={resetEmail} />
+                  <SecondaryButton
+                    label="Ouvrir Mail"
+                    compact
+                    onPress={() => void openMailApp()}
+                  />
+                </>
               ) : null}
             </View>
           </View>
 
-          {error ? <Text style={[styles.error, { color: c.danger }]}>{error}</Text> : null}
+          {error ? (
+            <Text
+              style={[styles.error, { color: c.danger }]}
+              accessibilityLiveRegion="polite"
+            >
+              {error}
+            </Text>
+          ) : null}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -166,7 +250,7 @@ const styles = StyleSheet.create({
   },
   tagline: { fontSize: 16, lineHeight: 22, maxWidth: 280 },
   card: {
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 18,
     borderWidth: StyleSheet.hairlineWidth,
   },

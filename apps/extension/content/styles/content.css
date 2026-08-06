@@ -24,7 +24,6 @@
   transition:
     border-color 120ms ease,
     box-shadow 120ms ease;
-  will-change: top, left, width, height;
 }
 
 .clippy-video-frame--in-clip {
@@ -34,91 +33,28 @@
     0 0 18px rgba(255, 0, 51, 0.28);
 }
 
-/* Floating frame preview while scrubbing handles */
-.clippy-frame-preview {
-  position: fixed;
-  z-index: 2147483647;
-  pointer-events: none;
-  transform: translate(-50%, -100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.55));
-}
-
-.clippy-frame-preview[hidden] {
-  display: none !important;
-}
-
-.clippy-frame-preview canvas {
-  display: block;
-  width: 160px;
-  height: auto;
-  max-height: 90px;
-  border-radius: 4px;
-  border: 2px solid #fff;
-  background: #0f0f0f;
-  object-fit: contain;
-}
-
-.clippy-frame-preview-time {
-  padding: 2px 6px;
-  border-radius: 2px;
-  background: rgba(0, 0, 0, 0.85);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-}
-
-.clippy-frame-preview[data-handle='left'] canvas,
-.clippy-frame-preview[data-handle='right'] canvas {
-  border-color: #ff0033;
-}
-
 /* Editor panel — always over the player, 10px inset L/R/B */
 .clippy-panel {
   position: fixed;
   box-sizing: border-box;
-  padding: 10px;
+  padding: 8px;
   border-radius: 12px;
-  background: rgba(15, 15, 15, 0.94);
+  background: rgba(12, 12, 14, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 10px 32px rgba(0, 0, 0, 0.55);
   color: #f1f1f1;
   pointer-events: auto;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px) saturate(1.2);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.clippy-panel-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: #aaa;
-}
-
-.clippy-meta-chip {
-  min-width: 3.2em;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  text-align: center;
-  font-weight: 500;
-}
-
-.clippy-meta-duration {
-  color: #ff0033;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+.clippy-panel:focus,
+.clippy-panel:focus-visible {
+  outline: none;
 }
 
 .clippy-timeline {
@@ -142,6 +78,63 @@
   pointer-events: none;
 }
 
+.clippy-clips-layer {
+  display: none;
+}
+
+.clippy-regions {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.clippy-clip-mark {
+  display: none;
+}
+
+.clippy-clip-tooltip {
+  position: absolute;
+  z-index: 20;
+  min-width: 112px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(15, 15, 15, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #aaa;
+  font-variant-numeric: tabular-nums;
+}
+
+.clippy-clip-tooltip[hidden] {
+  display: none !important;
+}
+
+.clippy-clip-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.clippy-clip-tooltip-row strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.clippy-filmstrip--loading {
+  opacity: 0.85;
+}
+
+.clippy-filmstrip--incomplete {
+  outline: 1px dashed rgba(255, 255, 255, 0.2);
+}
+
 .clippy-film-cell {
   width: 100%;
   height: 100%;
@@ -150,6 +143,10 @@
   background: #212121;
   border-right: 1px solid rgba(0, 0, 0, 0.35);
   pointer-events: none;
+}
+
+.clippy-film-cell--empty {
+  background: #2a2a2a;
 }
 
 .clippy-film-cell:last-child {
@@ -172,6 +169,11 @@
   cursor: ew-resize;
   z-index: 4;
   touch-action: none;
+}
+
+.clippy-playhead:focus,
+.clippy-playhead:focus-visible {
+  outline: none;
 }
 
 .clippy-playhead-knob {
@@ -203,17 +205,29 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(255, 0, 51, 0.28);
-  border: 2px solid #ff0033;
+  background: var(--clippy-clip-fill, rgba(255, 0, 51, 0.28));
+  border: 2px solid var(--clippy-clip-border, #ff0033);
   border-radius: 4px;
   cursor: grab;
   z-index: 2;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+  pointer-events: auto;
+  transition: box-shadow 120ms ease, opacity 120ms ease;
+}
+
+.clippy-region:not(.clippy-region--active) {
+  opacity: 0.85;
+}
+
+.clippy-region--active {
+  z-index: 3;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+    0 0 0 2px rgba(255, 255, 255, 0.25);
 }
 
 .clippy-region:active {
   cursor: grabbing;
-  background: rgba(255, 0, 51, 0.38);
 }
 
 .clippy-handle {
@@ -223,8 +237,26 @@
   width: 14px;
   cursor: ew-resize;
   z-index: 3;
-  background: #ff0033;
+  background: var(--clippy-clip-handle, #ff0033);
   touch-action: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.clippy-region--active .clippy-handle {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Invisible hit area ~44px for touch */
+.clippy-handle::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: 50%;
+  width: 44px;
+  margin-left: -22px;
 }
 
 .clippy-handle-left {
@@ -284,8 +316,13 @@
   user-select: none;
 }
 
+.clippy-btn:focus,
+.clippy-btn:focus-visible {
+  outline: none;
+}
+
 .clippy-btn:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 .clippy-btn-ghost {
@@ -304,6 +341,12 @@
 
 .clippy-btn-primary:hover {
   background: #e6002e;
+}
+
+.clippy-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .clippy-kbd {
@@ -465,6 +508,36 @@ html[dark] .clippy-queue-label,
   text-decoration: underline;
 }
 
+.clippy-queue-dismiss,
+.clippy-queue-options {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--yt-spec-text-secondary, #606060);
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  margin-left: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.clippy-queue-label + .clippy-queue-dismiss,
+.clippy-queue-label + .clippy-queue-options,
+.clippy-queue-label + .clippy-queue-link {
+  margin-left: auto;
+}
+
+.clippy-queue-dismiss:active,
+.clippy-queue-options:active {
+  transform: scale(0.97);
+}
+
+.clippy-queue-options {
+  color: #3ea6ff;
+}
+
 .clippy-queue-bar {
   height: 3px;
   border-radius: 2px;
@@ -484,7 +557,25 @@ html[dark] .clippy-queue-bar,
   background: #ff0033;
   transform: translateZ(0);
   transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.clippy-queue-bar-fill--animating {
   will-change: width;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clippy-queue-bar-fill {
+    transition: none;
+  }
+
+  .clippy-video-frame,
+  .clippy-btn {
+    transition: none;
+  }
+
+  .clippy-panel {
+    backdrop-filter: none;
+  }
 }
 
 .clippy-queue-bar--done .clippy-queue-bar-fill,
@@ -502,10 +593,20 @@ html[dark] .clippy-queue-bar,
 /* Player button — same chrome as other ytp-right-controls icons */
 .ytp-clippy-button {
   opacity: 0.9;
+  color: #fff;
 }
 
 .ytp-clippy-button:hover {
   opacity: 1;
+}
+
+.ytp-clippy-button:active {
+  transform: scale(0.97);
+}
+
+.ytp-clippy-button:focus,
+.ytp-clippy-button:focus-visible {
+  outline: none;
 }
 
 .ytp-clippy-button svg {

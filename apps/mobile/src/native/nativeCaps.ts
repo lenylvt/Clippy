@@ -1,5 +1,11 @@
 import { requireOptionalNativeModule } from 'expo';
 
-export function hasNativeVideo() {
-  return Boolean(requireOptionalNativeModule('ExpoVideo'));
+let cached: boolean | null = null;
+
+/** Whether the ExpoVideo native module is linked (dev client / production). */
+export function hasNativeVideo(): boolean {
+  if (cached == null) {
+    cached = Boolean(requireOptionalNativeModule('ExpoVideo'));
+  }
+  return cached;
 }

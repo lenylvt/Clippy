@@ -1,14 +1,24 @@
+import {
+  buildSignedClipUrl,
+  clipSigningSecret,
+  type ClipSignEnv,
+} from '../http/clipUrl';
 import type { Clip, ClipRow, JobPublic, JobRow } from '../types';
 
-function extensionFromR2Key(r2Key: string): 'mp4' | 'webm' {
-  return r2Key.endsWith('.mp4') ? 'mp4' : 'webm';
+export function normalizePositiveDuration(value: number | null | undefined): number | null {
+  return value != null && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-export function rowToClip(row: ClipRow, origin: string): Clip {
-  const duration =
-    row.video_duration != null && Number.isFinite(row.video_duration) && row.video_duration > 0
-      ? row.video_duration
-      : null;
+export function extensionFromR2Key(r2Key: string): 'mp4' | 'webm' {
+  return r2Key.toLowerCase().endsWith('.webm') ? 'webm' : 'mp4';
+}
+
+export async function rowToClip(
+  row: ClipRow,
+  origin: string,
+  env: ClipSignEnv,
+): Promise<Clip> {
+  const secret = clipSigningSecret(env);
   return {
     id: row.id,
     videoId: row.video_id,
@@ -16,15 +26,19 @@ export function rowToClip(row: ClipRow, origin: string): Clip {
     youtubeUrl: row.youtube_url,
     clipStart: row.clip_start,
     clipEnd: row.clip_end,
-    videoDuration: duration,
+    videoDuration: normalizePositiveDuration(row.video_duration),
     createdAt: row.created_at,
     expiresAt: row.expires_at,
-    url: `${origin}/clips/${row.id}`,
+    url: await buildSignedClipUrl(origin, row.id, secret, row.expires_at),
     extension: extensionFromR2Key(row.r2_key),
   };
 }
 
-export function rowToJob(row: JobRow, origin: string): JobPublic {
+export async function rowToJob(
+  row: JobRow,
+  origin: string,
+  env: ClipSignEnv,
+): Promise<JobPublic> {
   const job: JobPublic = {
     id: row.id,
     status: row.status,
@@ -41,7 +55,16 @@ export function rowToJob(row: JobRow, origin: string): JobPublic {
     updatedAt: row.updated_at,
   };
   if (row.clip_id) {
-    job.url = `${origin}/clips/${row.clip_id}`;
+    const secret = clipSigningSecret(env);
+    const exp = row.expires_at > Date.now() ? row.expires_at : Date.now() + 60_000;
+    job.url = await buildSignedClipUrl(origin, row.clip_id, secret, exp);
   }
   return job;
+}
+
+/** Status guard for terminal / mid-run job patches (mirrors SQL WHERE). */
+export function allowedStatusesForJobPatch(nextStatus: string | undefined): readonly string[] {
+  if (nextStatus === 'done') return ['running'];
+  if (nextStatus === 'error') return ['queued', 'running'];
+  return ['running'];
 }

@@ -16,6 +16,8 @@ export function SecondaryButton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
       style={({ pressed }) => [
         styles.btn,
@@ -27,7 +29,10 @@ export function SecondaryButton({
       ]}
       onPress={onPress}
     >
-      <Text style={[styles.btnText, compact && styles.btnTextCompact, { color: c.ink }]}>
+      <Text
+        selectable={false}
+        style={[styles.btnText, compact && styles.btnTextCompact, { color: c.ink }]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -38,6 +43,7 @@ const styles = StyleSheet.create({
   btn: {
     borderRadius: 14,
     paddingVertical: 15,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -45,8 +51,10 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   btnCompact: {
+    // radius ≈ paddingVertical + 1 (concentrique)
     borderRadius: 10,
     paddingVertical: 9,
+    paddingHorizontal: 12,
   },
   btnText: {
     fontWeight: '600',
@@ -55,6 +63,6 @@ const styles = StyleSheet.create({
   btnTextCompact: {
     fontSize: 14,
   },
-  pressed: { transform: [{ scale: 0.97 }] },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
   disabled: { opacity: 0.4 },
 });

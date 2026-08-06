@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import { useTheme } from '../../features/theme/theme';
 
 export function PrimaryButton({
@@ -15,21 +15,30 @@ export function PrimaryButton({
   tone?: 'accent' | 'danger';
 }) {
   const { c } = useTheme();
+  const inactive = !!(disabled || busy);
   const bg = tone === 'danger' ? c.danger : c.accent;
   const fg = tone === 'danger' ? '#FFFFFF' : c.onAccent;
   return (
     <Pressable
       accessibilityRole="button"
-      disabled={disabled || busy}
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: inactive, busy: !!busy }}
+      disabled={inactive}
       style={({ pressed }) => [
         styles.btn,
         { backgroundColor: bg },
-        pressed && !disabled && styles.pressed,
-        (disabled || busy) && styles.disabled,
+        pressed && !inactive && styles.pressed,
+        inactive && styles.disabled,
       ]}
       onPress={onPress}
     >
-      <Text style={[styles.btnText, { color: fg }]}>{busy ? '…' : label}</Text>
+      {busy ? (
+        <ActivityIndicator color={fg} />
+      ) : (
+        <Text selectable={false} style={[styles.btnText, { color: fg }]}>
+          {label}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -38,6 +47,7 @@ const styles = StyleSheet.create({
   btn: {
     borderRadius: 14,
     paddingVertical: 15,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -45,6 +55,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
   },
-  pressed: { transform: [{ scale: 0.97 }] },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
   disabled: { opacity: 0.4 },
 });

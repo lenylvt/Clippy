@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { useTheme } from '../../features/theme/theme';
 
+const HIT_SLOP = { top: 10, bottom: 10, left: 10, right: 10 } as const;
+
 export function DangerIconButton({
   onPress,
   label = 'Supprimer',
@@ -11,9 +13,10 @@ export function DangerIconButton({
   const { c } = useTheme();
   return (
     <Pressable
-      hitSlop={8}
+      hitSlop={HIT_SLOP}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint="Suppression définitive"
       style={({ pressed }) => [
         styles.dangerIcon,
         { backgroundColor: c.dangerSoft },
@@ -21,18 +24,26 @@ export function DangerIconButton({
       ]}
       onPress={onPress}
     >
-      <Text style={{ color: c.danger, fontSize: 15, fontWeight: '700' }}>⌫</Text>
+      <Text selectable={false} style={[styles.icon, { color: c.danger }]}>
+        ×
+      </Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   dangerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { transform: [{ scale: 0.97 }] },
+  icon: {
+    fontSize: 22,
+    fontWeight: '600',
+    lineHeight: 24,
+    marginTop: -1,
+  },
+  pressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
 });

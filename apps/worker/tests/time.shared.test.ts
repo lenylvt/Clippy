@@ -33,7 +33,7 @@ describe('formatAutoRemaining / deleteButtonLabel', () => {
     const now = 1_000_000;
     expect(deleteButtonLabel(now + 47 * 3_600_000, now)).toBe('Supprimer (Auto: 47h)');
     expect(deleteButtonLabel(now + 30 * 60_000, now)).toBe('Supprimer (Auto: 30 min)');
-    expect(deleteButtonLabel(now - 1000, now)).toBe('Supprimer (Auto: 0h)');
+    expect(deleteButtonLabel(now - 1000, now)).toBe('Supprimer (Auto: 0 min)');
   });
 });
 

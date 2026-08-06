@@ -15,11 +15,11 @@
     "worker:migrate": "npm --prefix apps/worker run migrate",
     "worker:migrate:local": "npm --prefix apps/worker run migrate:local",
     "worker:secret": "npm --prefix apps/worker run secret",
-    "ext:pack": "cd apps/extension && zip -r ../../clippy-extension.zip . -x '*.test.js' -x '*/.DS_Store'",
+    "ext:pack": "cd apps/extension && zip -r ../../clippy-extension.zip . -x '*.test.js' -x '*.test.ts' -x 'tests/*' -x 'key.pem' -x '.DS_Store' -x '*/.DS_Store' -x '.gitignore'",
     "mobile:start": "npm --prefix apps/mobile run start",
     "mobile:build:ios": "npm --prefix apps/mobile run ios:device",
     "bench:job": "node scripts/bench-job.mjs",
-    "test:py": "cd apps/worker/container && python3 test_download.py"
+    "test:py": "cd apps/worker/container && python3 test_download.py && python3 test_server.py"
   },
   "dependencies": {
     "@clippy/shared": "*"

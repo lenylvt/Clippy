@@ -15,6 +15,7 @@ describe('queueBarWidth', () => {
   it('garde un minimum visible en attente', () => {
     expect(queueBarWidth('queued', 0)).toBe(4);
     expect(queueBarWidth('preparing', 0)).toBe(8);
+    expect(queueBarWidth('unknown', 0)).toBe(8);
   });
 });
 
@@ -22,5 +23,12 @@ describe('stageToQueueStatus', () => {
   it('mappe les stages serveur vers le dock', () => {
     expect(stageToQueueStatus('downloading')).toBe('download');
     expect(stageToQueueStatus('cropping')).toBe('crop');
+    expect(stageToQueueStatus('???')).toBe('unknown');
+  });
+
+  it('reste idempotent sur les statuts dock', () => {
+    expect(stageToQueueStatus('download')).toBe('download');
+    expect(stageToQueueStatus('crop')).toBe('crop');
+    expect(stageToQueueStatus('upload')).toBe('upload');
   });
 });

@@ -79,21 +79,47 @@ h2 {
   color: var(--ok);
 }
 
-.qr {
-  display: grid;
-  place-items: center;
-  width: fit-content;
-  margin: 0.85rem auto 0.15rem;
-  padding: 0.5rem;
-  border-radius: 10px;
-  background: #fff;
+.block[data-state="paired"] .actions {
+  margin-top: 0.75rem;
 }
 
-.qr img {
+.qr {
+  display: none;
+  width: fit-content;
+  margin: 0.85rem auto 0;
+  padding: 0.65rem;
+  border-radius: 12px;
+  background: #fff;
+  outline: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.qr:not([hidden]) {
+  display: grid;
+  place-items: center;
+  gap: 0.35rem;
+}
+
+.qr[hidden] {
+  display: none !important;
+}
+
+.qr canvas {
   display: block;
-  width: 140px;
-  height: 140px;
-  border-radius: 6px;
+  width: 168px;
+  height: 168px;
+  border-radius: 4px;
+}
+
+.expire {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #5a5a55;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.expire[hidden] {
+  display: none !important;
 }
 
 .actions {
@@ -101,6 +127,11 @@ h2 {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.85rem;
+}
+
+.actions:empty,
+.actions:not(:has(button:not([hidden]))) {
+  display: none;
 }
 
 .field {
@@ -155,6 +186,11 @@ input.invalid {
 
 .btn:active {
   transform: scale(0.97);
+}
+
+.btn:focus,
+.btn:focus-visible {
+  outline: none;
 }
 
 .btn:disabled {
