@@ -90,6 +90,8 @@ export type Env = {
   PUBLIC_ORIGINS?: string;
   /** Chrome extension ID → allows only `chrome-extension://<id>` (32 chars a–p). */
   EXTENSION_ID?: string;
+  /** Latest sideloaded extension version (must match packaged manifest + R2 zip). */
+  EXTENSION_VERSION?: string;
   /**
    * Optional R2 S3 API credentials for container→R2 direct PUT.
    * Set via wrangler secrets / vars (see wrangler.jsonc comments):
@@ -109,6 +111,8 @@ export type Env = {
   /** Optional session/HMAC pepper; clip URL signing prefers this over CONTAINER_SECRET. */
   SESSION_SECRET?: string;
   OTP_PEPPER?: string;
+  /** Static assets (Kumo install SPA under /install/). */
+  ASSETS?: Fetcher;
 };
 
 /** Fail-fast when the worker is misconfigured without an internal secret. */

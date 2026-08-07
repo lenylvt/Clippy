@@ -75,6 +75,14 @@ h2 {
   user-select: none;
 }
 
+.block.update {
+  outline-color: rgba(93, 204, 138, 0.35);
+}
+
+.block.update .actions a.btn {
+  text-decoration: none;
+}
+
 .block[data-state="paired"] .meta {
   color: var(--ok);
 }
@@ -130,7 +138,7 @@ h2 {
 }
 
 .actions:empty,
-.actions:not(:has(button:not([hidden]))) {
+.actions:not(:has(button:not([hidden]), a.btn:not([hidden]))) {
   display: none;
 }
 

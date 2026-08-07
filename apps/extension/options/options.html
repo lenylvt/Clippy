@@ -11,6 +11,24 @@
     <main class="wrap">
       <h1>Clippy</h1>
 
+      <section id="update-banner" class="block update" hidden aria-labelledby="update-title">
+        <div class="row">
+          <div>
+            <h2 id="update-title">Mise à jour disponible</h2>
+            <p id="update-meta" class="meta"></p>
+          </div>
+          <span class="badge">Nouveau</span>
+        </div>
+        <ol class="steps">
+          <li>Télécharge le zip, remplace les fichiers du dossier Clippy</li>
+          <li>Ouvre <kbd>chrome://extensions</kbd> → Actualiser Clippy</li>
+        </ol>
+        <div class="actions">
+          <a id="update-zip" class="btn primary" href="#" target="_blank" rel="noopener">Télécharger</a>
+          <a id="update-guide" class="btn" href="#" target="_blank" rel="noopener">Comment mettre à jour</a>
+        </div>
+      </section>
+
       <section class="block pair" aria-labelledby="pair-title" data-state="loading">
         <div class="row">
           <div class="pair-copy">

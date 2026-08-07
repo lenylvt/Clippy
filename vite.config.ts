@@ -20,6 +20,7 @@ export default defineConfig({
       'apps/worker/tests/**/*.test.ts',
       'packages/shared/tests/**/*.test.ts',
       'apps/mobile/tests/**/*.test.ts',
+      'apps/install/tests/**/*.test.ts',
     ],
   },
 });

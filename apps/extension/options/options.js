@@ -23,6 +23,10 @@ const pairQrCanvas = /** @type {HTMLCanvasElement | null} */ (document.getElemen
 const pairRefresh = /** @type {HTMLButtonElement | null} */ (document.getElementById('pair-refresh'));
 const pairUnlink = /** @type {HTMLButtonElement | null} */ (document.getElementById('pair-unlink'));
 const pairExpire = document.getElementById('pair-expire');
+const updateBanner = document.getElementById('update-banner');
+const updateMeta = document.getElementById('update-meta');
+const updateZip = /** @type {HTMLAnchorElement | null} */ (document.getElementById('update-zip'));
+const updateGuide = /** @type {HTMLAnchorElement | null} */ (document.getElementById('update-guide'));
 
 if (
   !durationInput ||
@@ -36,6 +40,10 @@ if (
   !pairQrCanvas ||
   !pairRefresh ||
   !pairUnlink ||
+  !updateBanner ||
+  !updateMeta ||
+  !updateZip ||
+  !updateGuide ||
   typeof isAllowedWorkerUrl !== 'function' ||
   typeof isValidPairingDeepLink !== 'function' ||
   typeof normalizeWorkerBase !== 'function'
@@ -420,8 +428,48 @@ commandsLink.addEventListener('click', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     void refreshPairingStatus();
+    void refreshUpdateBanner();
     schedulePoll();
   }
 });
 
+/**
+ * @param {{
+ *   available?: boolean;
+ *   localVersion?: string;
+ *   remoteVersion?: string;
+ *   zipUrl?: string;
+ *   installUrl?: string;
+ * } | null | undefined} update
+ */
+function renderUpdateBanner(update) {
+  if (!update?.available) {
+    updateBanner.hidden = true;
+    return;
+  }
+  const local = update.localVersion || '?';
+  const remote = update.remoteVersion || '?';
+  updateMeta.textContent = `Tu as ${local} · disponible ${remote}`;
+  if (typeof update.zipUrl === 'string' && update.zipUrl) {
+    updateZip.href = update.zipUrl;
+  }
+  if (typeof update.installUrl === 'string' && update.installUrl) {
+    const base = update.installUrl.replace(/\/+$/, '');
+    updateGuide.href = `${base}/#update`;
+  }
+  updateBanner.hidden = false;
+}
+
+async function refreshUpdateBanner() {
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'GET_UPDATE_STATUS' });
+    if (res?.ok) {
+      renderUpdateBanner(res.update);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 loadSettings();
+void refreshUpdateBanner();

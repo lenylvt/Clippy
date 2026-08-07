@@ -21,7 +21,13 @@ import {
   handlePairingStatus,
   handlePairingUnlink,
 } from './routes/pairing';
-import { handlePrivacy, PRIVACY_PATH } from './routes/privacy';
+import {
+  handleExtensionApi,
+  handleExtensionZip,
+  EXTENSION_API_PATH,
+  EXTENSION_ZIP_PATH,
+} from './routes/extension-release';
+import { handleInstall, INSTALL_PATH } from './routes/install';
 import { requireContainerSecret, type Env } from './types';
 
 /** Durable Object class exports required by wrangler bindings. */
@@ -141,8 +147,14 @@ const handler: ExportedHandler<Env> = {
         return jsonResponse(request, env, { ok: true, service: 'clippy', app: true });
       }
 
-      if (request.method === 'GET' && pathname === PRIVACY_PATH) {
-        return handlePrivacy();
+      if (request.method === 'GET' && pathname === INSTALL_PATH) {
+        return handleInstall(request);
+      }
+      if (request.method === 'GET' && pathname === EXTENSION_API_PATH) {
+        return handleExtensionApi(request, env);
+      }
+      if (request.method === 'GET' && pathname === EXTENSION_ZIP_PATH) {
+        return await handleExtensionZip(request, env);
       }
 
       return jsonResponse(request, env, { ok: false, error: 'not_found' }, 404);

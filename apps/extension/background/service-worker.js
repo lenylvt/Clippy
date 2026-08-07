@@ -3,6 +3,8 @@ import '../lib/config.js';
 import '../lib/clip-constants.js';
 import '../lib/stages.js';
 import '../lib/title.js';
+import '../lib/semver.js';
+import '../lib/update-check.js';
 import {
   createServerJob,
   labelForJobError,
@@ -14,6 +16,8 @@ const DEVICE_TOKEN_KEY = 'clippy.deviceToken';
 const LEGACY_DEVICE_TOKEN_KEY = 'deviceToken';
 const INFLIGHT_JOBS_KEY = 'clippy.inflightJobs';
 const POLL_ALARM_NAME = 'clippy.resume-inflight';
+const UPDATE_ALARM_NAME = 'clippy.check-update';
+const UPDATE_ALARM_MINUTES = 12 * 60;
 const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 /** Aligné `apps/worker/src/auth/bearer.ts`. */
 const TOKEN_RE = /^[a-zA-Z0-9_-]{16,128}$/;
@@ -370,6 +374,49 @@ async function ensurePollAlarm() {
   await chrome.alarms.create(POLL_ALARM_NAME, { periodInMinutes: 1 });
 }
 
+async function ensureUpdateAlarm() {
+  const existing = await chrome.alarms.get(UPDATE_ALARM_NAME);
+  if (existing) return;
+  await chrome.alarms.create(UPDATE_ALARM_NAME, { periodInMinutes: UPDATE_ALARM_MINUTES });
+}
+
+/**
+ * @param {{ available?: boolean } | null | undefined} state
+ */
+async function applyUpdateBadge(state) {
+  try {
+    if (state?.available) {
+      await chrome.action.setBadgeText({ text: 'UP' });
+      await chrome.action.setBadgeBackgroundColor({ color: '#5dcc8a' });
+      await chrome.action.setTitle({ title: 'Clippy — mise à jour disponible' });
+    } else {
+      await chrome.action.setBadgeText({ text: '' });
+      await chrome.action.setTitle({ title: 'Clippy — réglages' });
+    }
+  } catch (err) {
+    clippyLog('bg', 'update:badge_fail', { error: String(err) });
+  }
+}
+
+async function runUpdateCheck() {
+  try {
+    const workerUrl = await resolveWorkerUrl();
+    const localVersion = chrome.runtime.getManifest().version;
+    const state = await globalThis.checkExtensionUpdate(workerUrl, localVersion);
+    await globalThis.writeUpdateState(state);
+    await applyUpdateBadge(state);
+    clippyLog('bg', 'update:checked', {
+      available: state.available,
+      local: state.localVersion,
+      remote: state.remoteVersion,
+    });
+    return state;
+  } catch (err) {
+    clippyLog('bg', 'update:check_fail', { error: String(err) });
+    return null;
+  }
+}
+
 /**
  * Create the server job and start background watch. Resolves as soon as POST succeeds.
  * @param {{
@@ -449,18 +496,27 @@ chrome.commands.onCommand.addListener((command) => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name !== POLL_ALARM_NAME) return;
-  void resumeInflightJobs();
+  if (alarm.name === POLL_ALARM_NAME) {
+    void resumeInflightJobs();
+    return;
+  }
+  if (alarm.name === UPDATE_ALARM_NAME) {
+    void runUpdateCheck();
+  }
 });
 
 chrome.runtime.onStartup.addListener(() => {
   void ensurePollAlarm();
+  void ensureUpdateAlarm();
   void resumeInflightJobs();
+  void runUpdateCheck();
 });
 
 chrome.runtime.onInstalled.addListener(() => {
   void ensurePollAlarm();
+  void ensureUpdateAlarm();
   void resumeInflightJobs();
+  void runUpdateCheck();
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -541,9 +597,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === 'GET_UPDATE_STATUS') {
+    if (sender.id && sender.id !== chrome.runtime.id) {
+      sendResponse({ ok: false, error: 'unauthorized' });
+      return false;
+    }
+    (async () => {
+      const force = Boolean(message?.force);
+      let state = force ? null : await globalThis.readUpdateState();
+      if (!state || force) {
+        state = await runUpdateCheck();
+      } else {
+        await applyUpdateBadge(state);
+      }
+      sendResponse({ ok: true, update: state });
+    })().catch((err) => sendResponse(errorPayload(err)));
+    return true;
+  }
+
   clippyLog('bg', 'message:unknown', { type: message?.type });
   return false;
 });
 
 void ensurePollAlarm();
+void ensureUpdateAlarm();
 void resumeInflightJobs();
+void runUpdateCheck();

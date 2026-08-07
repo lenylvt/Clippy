@@ -5,6 +5,19 @@
   "compatibility_date": "2026-07-12",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Built by apps/install (`npm run install:build`) → public/install/
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*",
+      "/extension.zip",
+      "/clips/*",
+      "/health",
+      "/",
+      "/install"
+    ]
+  },
   "r2_buckets": [
     {
       "binding": "CLIPS",
@@ -39,6 +52,7 @@
     "PUBLIC_ORIGIN": "https://clippy.runtimelayer.workers.dev",
     "PUBLIC_ORIGINS": "https://clippy.runtimelayer.workers.dev",
     "EXTENSION_ID": "mdlffepdgjacjmgjjhjigieingacjpfn",
+    "EXTENSION_VERSION": "0.2.6",
     "R2_BUCKET": "clippy-clips"
   },
   "triggers": {

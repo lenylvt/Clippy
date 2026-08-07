@@ -1,0 +1,94 @@
+@source "../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
+@import "@cloudflare/kumo/styles/tailwind";
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-kumo-background, #f2f2f2);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Enter / exit — opacity + blur + translateY, staggered */
+:root {
+  --enter-dur: 380ms;
+  --enter-ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --exit-dur: 120ms;
+  --exit-ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --stagger-delay: 45ms;
+  --title-delay: 35ms;
+  --resize-dur: 180ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes enter {
+  from {
+    transform: translateY(8px);
+    filter: blur(8px);
+    opacity: 0;
+  }
+}
+
+@keyframes highlight-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+    filter: blur(4px);
+  }
+}
+
+@keyframes exit {
+  to {
+    filter: blur(4px);
+    opacity: 0;
+  }
+}
+
+.animate-enter {
+  animation: enter var(--enter-dur) var(--enter-ease) both;
+  animation-delay: calc(var(--stagger-delay) * var(--stagger, 0));
+}
+
+.animate-enter-title-word {
+  display: inline-block;
+  animation: enter var(--enter-dur) var(--enter-ease) both;
+  animation-delay: calc(var(--title-delay) * var(--stagger, 0));
+}
+
+.animate-highlight {
+  animation: highlight-in var(--enter-dur) var(--enter-ease) both;
+}
+
+.animate-exit {
+  animation: exit var(--exit-dur) var(--exit-ease) both;
+}
+
+.chrome-switch-thumb {
+  transition: transform var(--enter-dur) var(--enter-ease), background-color 0ms;
+}
+
+.t-resize {
+  transition: height var(--resize-dur) var(--resize-ease);
+  will-change: height;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-enter,
+  .animate-enter-title-word,
+  .animate-highlight,
+  .animate-exit {
+    animation: none !important;
+  }
+  .chrome-switch-thumb {
+    transition: none !important;
+  }
+  .t-resize {
+    transition: none !important;
+  }
+}
