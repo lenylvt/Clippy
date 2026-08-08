@@ -69,6 +69,56 @@ type EmailEvent = {
   from?: string;
 };
 
+/**
+ * Cloudflare `/client/v4/graphql` returns a REST envelope:
+ * `{ success, result: { viewer… }, errors }` — not bare `{ data, errors }`.
+ */
+export function normalizeGraphqlResponse(json: unknown): GqlResult {
+  if (!json || typeof json !== 'object') {
+    return { errors: [{ message: 'empty_graphql' }] };
+  }
+  const body = json as {
+    data?: unknown;
+    result?: { data?: unknown; viewer?: unknown } | null;
+    errors?: Array<{ message?: string; code?: number | string }>;
+    success?: boolean;
+  };
+
+  const restErrors =
+    Array.isArray(body.errors) && body.errors.length > 0
+      ? body.errors.map((e) => ({
+          message: e.message ?? (e.code != null ? `code_${e.code}` : 'graphql_error'),
+        }))
+      : undefined;
+
+  if (body.data != null) {
+    return { data: body.data, errors: restErrors };
+  }
+
+  const result = body.result;
+  if (result && typeof result === 'object') {
+    if ('data' in result && result.data != null) {
+      return { data: result.data, errors: restErrors };
+    }
+    if ('viewer' in result && result.viewer != null) {
+      return { data: { viewer: result.viewer }, errors: restErrors };
+    }
+  }
+
+  if (restErrors?.length) return { errors: restErrors };
+  if (body.success === false) return { errors: [{ message: 'graphql_unsuccessful' }] };
+  return { errors: [{ message: 'empty_graphql' }] };
+}
+
+function gqlFailed(res: GqlResult): boolean {
+  return Boolean(res.errors?.length) || res.data == null;
+}
+
+function gqlErrorTag(res: GqlResult): string {
+  const msg = res.errors?.[0]?.message?.replace(/\s+/g, '_').slice(0, 80);
+  return msg ? `:${msg}` : '';
+}
+
 /** Sum of each day's peak bytes / 1e9 / 30 — Cloudflare GB-month definition. */
 export function gbMonthsFromDailyPeaks(peaks: Map<string, number>): number {
   let byteDays = 0;
@@ -117,23 +167,44 @@ function accountNode(data: unknown): Record<string, unknown> | null {
   return first && typeof first === 'object' ? (first as Record<string, unknown>) : null;
 }
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function graphql(
   token: string,
   query: string,
   variables: Record<string, unknown>,
 ): Promise<GqlResult> {
-  const res = await fetch(GRAPHQL_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) {
-    return { errors: [{ message: `http_${res.status}` }] };
+  let last: GqlResult = { errors: [{ message: 'graphql_untried' }] };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const res = await fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get('Retry-After') ?? 0);
+      const waitMs = Math.max(2_000, retryAfter * 1000, 3_000 * (attempt + 1));
+      await sleep(waitMs);
+      last = { errors: [{ message: 'http_429' }] };
+      continue;
+    }
+    if (!res.ok) {
+      return { errors: [{ message: `http_${res.status}` }] };
+    }
+    const json = (await res.json().catch(() => null)) as unknown;
+    last = normalizeGraphqlResponse(json);
+    if (last.errors?.some((e) => /429|rate.?limit/i.test(e.message))) {
+      await sleep(3_000 * (attempt + 1));
+      continue;
+    }
+    return last;
   }
-  return (await res.json()) as GqlResult;
+  return last;
 }
 
 function classifyR2Action(actionType: string): 'A' | 'B' | 'free' | 'unknown' {
@@ -314,6 +385,56 @@ export async function collectCloudflareUsage(
   env: Env,
   period: PeriodKey,
 ): Promise<{ usage: UsageSnapshot; missingSources: string[] }> {
+  const cycleDay = Number(env.CF_BILLING_CYCLE_DAY ?? 1) || 1;
+  const cacheKey = new Request(
+    `https://clippy.internal/admin-usage/${period}/${cycleDay}`,
+  );
+  try {
+    const cache = await caches.open('clippy-admin-usage');
+    const cached = await cache.match(cacheKey);
+    if (cached) {
+      const body = (await cached.json()) as {
+        usage: UsageSnapshot;
+        missingSources: string[];
+      };
+      if (body?.usage) {
+        return {
+          usage: body.usage,
+          missingSources: [...(body.missingSources ?? []), 'cache_hit'],
+        };
+      }
+    }
+  } catch {
+    // Cache API unavailable — continue without cache.
+  }
+
+  const collected = await collectCloudflareUsageUncached(env, period);
+  try {
+    const hasHardFailure = collected.missingSources.some((s) =>
+      /http_429|http_401|cf_api_token/.test(s),
+    );
+    if (!hasHardFailure) {
+      const cache = await caches.open('clippy-admin-usage');
+      await cache.put(
+        cacheKey,
+        new Response(JSON.stringify(collected), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=60',
+          },
+        }),
+      );
+    }
+  } catch {
+    // ignore cache write failures
+  }
+  return collected;
+}
+
+async function collectCloudflareUsageUncached(
+  env: Env,
+  period: PeriodKey,
+): Promise<{ usage: UsageSnapshot; missingSources: string[] }> {
   const usage = emptyUsage();
   const missing: string[] = [];
   const cycleDay = Number(env.CF_BILLING_CYCLE_DAY ?? 1) || 1;
@@ -335,37 +456,196 @@ export async function collectCloudflareUsage(
     return { usage, missingSources: missing };
   }
 
-  // Workers — scriptName = clippy
-  // https://developers.cloudflare.com/analytics/graphql-api/tutorials/querying-workers-metrics/
-  {
-    const q = `
-      query($accountTag: String!, $start: Time!, $end: Time!, $scriptName: String!) {
-        viewer {
-          accounts(filter: { accountTag: $accountTag }) {
-            workersInvocationsAdaptive(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                scriptName: $scriptName
-              }
-            ) {
-              sum { requests errors subrequests cpuTimeUs }
+  const zoneId = env.CF_ZONE_ID?.trim() || CLIPPY_ZONE_ID;
+  const namespaceIds = CLIPPY_DO_NAMESPACE_IDS;
+
+  // Two GraphQL round-trips only (account + zone) to stay under CF rate limits.
+  const accountQ = `
+    query(
+      $accountTag: String!
+      $start: Time!
+      $end: Time!
+      $scriptName: String!
+      $bucketName: String!
+      $databaseId: String!
+      $namespaceIds: [string!]!
+      $applicationId: String!
+    ) {
+      viewer {
+        accounts(filter: { accountTag: $accountTag }) {
+          workersInvocationsAdaptive(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              scriptName: $scriptName
             }
+          ) {
+            sum { requests errors subrequests cpuTimeUs }
+          }
+          workersInvocationsScheduled(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              scriptName: $scriptName
+            }
+          ) {
+            datetime
+            cron
+            status
+          }
+          r2OperationsAdaptiveGroups(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              bucketName: $bucketName
+            }
+          ) {
+            sum { requests }
+            dimensions { actionType }
+          }
+          r2StorageAdaptiveGroups(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              bucketName: $bucketName
+            }
+            orderBy: [datetime_DESC]
+          ) {
+            max { payloadSize metadataSize objectCount }
+            dimensions { datetime }
+          }
+          d1AnalyticsAdaptiveGroups(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              databaseId: $databaseId
+            }
+          ) {
+            sum { rowsRead rowsWritten readQueries writeQueries }
+          }
+          d1StorageAdaptiveGroups(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              databaseId: $databaseId
+            }
+            orderBy: [datetime_DESC]
+          ) {
+            max { databaseSizeBytes }
+            dimensions { datetime date }
+          }
+          durableObjectsInvocationsAdaptiveGroups(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              scriptName: $scriptName
+              namespaceId_in: $namespaceIds
+            }
+          ) {
+            sum { requests }
+            dimensions { namespaceId }
+          }
+          durableObjectsPeriodicGroups(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              namespaceId_in: $namespaceIds
+            }
+          ) {
+            sum { activeTime rowsRead rowsWritten }
+            dimensions { namespaceId }
+          }
+          durableObjectsSqlStorageGroups(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              namespaceId_in: $namespaceIds
+            }
+            orderBy: [datetime_DESC]
+          ) {
+            max { storedBytes }
+            dimensions { datetime namespaceId }
+          }
+          containersUsageAdaptiveGroups(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              applicationId: $applicationId
+            }
+          ) {
+            sum { cpuTimeSec allocatedMemory allocatedDisk txBytes }
+            dimensions { region }
           }
         }
-      }`;
-    const res = await graphql(token, q, {
-      accountTag: accountId,
-      start: startIso,
-      end: endIso,
-      scriptName: workerName,
-    });
-    if (res.errors?.length || !res.data) {
-      missing.push('workers_graphql');
-    } else {
+      }
+    }`;
+
+  const accountRes = await graphql(token, accountQ, {
+    accountTag: accountId,
+    start: startIso,
+    end: endIso,
+    scriptName: workerName,
+    bucketName: bucket,
+    databaseId: d1Id,
+    namespaceIds,
+    applicationId: containerAppId,
+  });
+
+  if (gqlFailed(accountRes)) {
+    const tag = gqlErrorTag(accountRes);
+    missing.push(
+      `workers_graphql${tag}`,
+      `workers_cron_graphql${tag}`,
+      `r2_ops_graphql${tag}`,
+      `r2_storage_graphql${tag}`,
+      `d1_graphql${tag}`,
+      `d1_storage_graphql${tag}`,
+      `do_invocations_graphql${tag}`,
+      `do_periodic_graphql${tag}`,
+      `do_storage_graphql${tag}`,
+      `containers_graphql${tag}`,
+    );
+    const daysApprox = Math.max((end - start) / 86_400_000, 1 / 24);
+    usage.workersCronRequests =
+      Math.floor(daysApprox * 24 * 12) + Math.floor(daysApprox * 24);
+    missing.push('workers_cron_estimated');
+    try {
+      let listed = await env.CLIPS.list({ limit: 1000 });
+      let bytes = 0;
+      let count = 0;
+      for (;;) {
+        for (const obj of listed.objects) {
+          bytes += obj.size;
+          count += 1;
+        }
+        if (!listed.truncated) break;
+        listed = await env.CLIPS.list({ limit: 1000, cursor: listed.cursor });
+      }
+      usage.r2StorageBytes = bytes;
+      usage.r2StorageGbMonths = (bytes / 1_000_000_000) * (days / 30);
+      usage.r2ObjectCount = count;
+      missing.push('r2_storage_gb_month_estimated');
+    } catch {
+      missing.push('r2_list');
+    }
+    usage.containerActiveSeconds = await containerSecondsFromJobs(env, start, end);
+    missing.push('containers_estimated_from_jobs');
+  } else {
+    const acc = accountNode(accountRes.data) ?? {};
+
+    {
       const rows =
-        (accountNode(res.data)?.workersInvocationsAdaptive as Array<{
+        (acc.workersInvocationsAdaptive as Array<{
           sum?: {
             requests?: number;
             errors?: number;
@@ -388,83 +668,20 @@ export async function collectCloudflareUsage(
       usage.workersSubrequests = sub;
       usage.workersCpuMs = cpuUs / 1000;
     }
-  }
 
-  // Cron — measured via workersInvocationsScheduled (not estimated from schedule math)
-  {
-    const q = `
-      query($accountTag: String!, $start: Time!, $end: Time!, $scriptName: String!) {
-        viewer {
-          accounts(filter: { accountTag: $accountTag }) {
-            workersInvocationsScheduled(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                scriptName: $scriptName
-              }
-            ) {
-              datetime
-              cron
-              status
-            }
-          }
-        }
-      }`;
-    const res = await graphql(token, q, {
-      accountTag: accountId,
-      start: startIso,
-      end: endIso,
-      scriptName: workerName,
-    });
-    if (res.errors?.length || !res.data) {
-      missing.push('workers_cron_graphql');
-      const daysApprox = Math.max((end - start) / 86_400_000, 1 / 24);
-      usage.workersCronRequests =
-        Math.floor(daysApprox * 24 * 12) + Math.floor(daysApprox * 24);
-      missing.push('workers_cron_estimated');
-    } else {
+    {
       const rows =
-        (accountNode(res.data)?.workersInvocationsScheduled as Array<{
+        (acc.workersInvocationsScheduled as Array<{
           datetime?: string;
           cron?: string;
           status?: string;
         }>) ?? [];
       usage.workersCronRequests = rows.length;
     }
-  }
 
-  // R2 operations — bucket clippy-clips only; Class A/B from CF pricing lists
-  {
-    const q = `
-      query($accountTag: String!, $start: Time!, $end: Time!, $bucketName: String!) {
-        viewer {
-          accounts(filter: { accountTag: $accountTag }) {
-            r2OperationsAdaptiveGroups(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                bucketName: $bucketName
-              }
-            ) {
-              sum { requests }
-              dimensions { actionType }
-            }
-          }
-        }
-      }`;
-    const res = await graphql(token, q, {
-      accountTag: accountId,
-      start: startIso,
-      end: endIso,
-      bucketName: bucket,
-    });
-    if (res.errors?.length || !res.data) {
-      missing.push('r2_ops_graphql');
-    } else {
+    {
       const groups =
-        (accountNode(res.data)?.r2OperationsAdaptiveGroups as Array<{
+        (acc.r2OperationsAdaptiveGroups as Array<{
           sum?: { requests?: number };
           dimensions?: { actionType?: string };
         }>) ?? [];
@@ -481,59 +698,10 @@ export async function collectCloudflareUsage(
         else if (klass === 'B') usage.r2ClassB += n;
       }
     }
-  }
 
-  // R2 storage — latest payload for clippy-clips + GB-month from daily peaks
-  {
-    const q = `
-      query($accountTag: String!, $start: Time!, $end: Time!, $bucketName: String!) {
-        viewer {
-          accounts(filter: { accountTag: $accountTag }) {
-            r2StorageAdaptiveGroups(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                bucketName: $bucketName
-              }
-              orderBy: [datetime_DESC]
-            ) {
-              max { payloadSize metadataSize objectCount }
-              dimensions { datetime }
-            }
-          }
-        }
-      }`;
-    const res = await graphql(token, q, {
-      accountTag: accountId,
-      start: startIso,
-      end: endIso,
-      bucketName: bucket,
-    });
-    if (res.errors?.length || !res.data) {
-      missing.push('r2_storage_graphql');
-      try {
-        let listed = await env.CLIPS.list({ limit: 1000 });
-        let bytes = 0;
-        let count = 0;
-        for (;;) {
-          for (const obj of listed.objects) {
-            bytes += obj.size;
-            count += 1;
-          }
-          if (!listed.truncated) break;
-          listed = await env.CLIPS.list({ limit: 1000, cursor: listed.cursor });
-        }
-        usage.r2StorageBytes = bytes;
-        usage.r2StorageGbMonths = (bytes / 1_000_000_000) * (days / 30);
-        usage.r2ObjectCount = count;
-        missing.push('r2_storage_gb_month_estimated');
-      } catch {
-        missing.push('r2_list');
-      }
-    } else {
+    {
       const groups =
-        (accountNode(res.data)?.r2StorageAdaptiveGroups as Array<{
+        (acc.r2StorageAdaptiveGroups as Array<{
           max?: {
             payloadSize?: number;
             metadataSize?: number;
@@ -577,43 +745,10 @@ export async function collectCloudflareUsage(
         }
       }
     }
-  }
 
-  // D1 — databaseId = clippy (analytics + storage)
-  {
-    const analyticsQ = `
-      query($accountTag: String!, $start: Time!, $end: Time!, $databaseId: String!) {
-        viewer {
-          accounts(filter: { accountTag: $accountTag }) {
-            d1AnalyticsAdaptiveGroups(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                databaseId: $databaseId
-              }
-            ) {
-              sum {
-                rowsRead
-                rowsWritten
-                readQueries
-                writeQueries
-              }
-            }
-          }
-        }
-      }`;
-    const analyticsRes = await graphql(token, analyticsQ, {
-      accountTag: accountId,
-      start: startIso,
-      end: endIso,
-      databaseId: d1Id,
-    });
-    if (analyticsRes.errors?.length || !analyticsRes.data) {
-      missing.push('d1_graphql');
-    } else {
+    {
       const groups =
-        (accountNode(analyticsRes.data)?.d1AnalyticsAdaptiveGroups as Array<{
+        (acc.d1AnalyticsAdaptiveGroups as Array<{
           sum?: {
             rowsRead?: number;
             rowsWritten?: number;
@@ -633,36 +768,9 @@ export async function collectCloudflareUsage(
       }
     }
 
-    const storageQ = `
-      query($accountTag: String!, $start: Time!, $end: Time!, $databaseId: String!) {
-        viewer {
-          accounts(filter: { accountTag: $accountTag }) {
-            d1StorageAdaptiveGroups(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                databaseId: $databaseId
-              }
-              orderBy: [datetime_DESC]
-            ) {
-              max { databaseSizeBytes }
-              dimensions { datetime date }
-            }
-          }
-        }
-      }`;
-    const storageRes = await graphql(token, storageQ, {
-      accountTag: accountId,
-      start: startIso,
-      end: endIso,
-      databaseId: d1Id,
-    });
-    if (storageRes.errors?.length || !storageRes.data) {
-      missing.push('d1_storage_graphql');
-    } else {
+    {
       const groups =
-        (accountNode(storageRes.data)?.d1StorageAdaptiveGroups as Array<{
+        (acc.d1StorageAdaptiveGroups as Array<{
           max?: { databaseSizeBytes?: number };
           dimensions?: { datetime?: string; date?: string };
         }>) ?? [];
@@ -677,49 +785,12 @@ export async function collectCloudflareUsage(
       }
       usage.d1StorageGbMonths = gbMonthsFromDailyPeaks(dailyPeaks);
     }
-  }
 
-  // Durable Objects — ClipContainer + JobQueue only (filter in GraphQL)
-  {
-    const invQ = `
-      query(
-        $accountTag: String!
-        $start: Time!
-        $end: Time!
-        $scriptName: String!
-        $namespaceIds: [string!]!
-      ) {
-        viewer {
-          accounts(filter: { accountTag: $accountTag }) {
-            durableObjectsInvocationsAdaptiveGroups(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                scriptName: $scriptName
-                namespaceId_in: $namespaceIds
-              }
-            ) {
-              sum { requests }
-              dimensions { namespaceId }
-            }
-          }
-        }
-      }`;
-    const invRes = await graphql(token, invQ, {
-      accountTag: accountId,
-      start: startIso,
-      end: endIso,
-      scriptName: workerName,
-      namespaceIds: CLIPPY_DO_NAMESPACE_IDS,
-    });
-    if (invRes.errors?.length || !invRes.data) {
-      missing.push('do_invocations_graphql');
-    } else {
+    {
       usage.doRequests = 0;
       usage.doByClass = {};
       const inv =
-        (accountNode(invRes.data)?.durableObjectsInvocationsAdaptiveGroups as Array<{
+        (acc.durableObjectsInvocationsAdaptiveGroups as Array<{
           sum?: { requests?: number };
           dimensions?: { namespaceId?: string };
         }>) ?? [];
@@ -741,43 +812,12 @@ export async function collectCloudflareUsage(
       }
     }
 
-    const perQ = `
-      query(
-        $accountTag: String!
-        $start: Time!
-        $end: Time!
-        $namespaceIds: [string!]!
-      ) {
-        viewer {
-          accounts(filter: { accountTag: $accountTag }) {
-            durableObjectsPeriodicGroups(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                namespaceId_in: $namespaceIds
-              }
-            ) {
-              sum { activeTime rowsRead rowsWritten }
-              dimensions { namespaceId }
-            }
-          }
-        }
-      }`;
-    const perRes = await graphql(token, perQ, {
-      accountTag: accountId,
-      start: startIso,
-      end: endIso,
-      namespaceIds: CLIPPY_DO_NAMESPACE_IDS,
-    });
-    if (perRes.errors?.length || !perRes.data) {
-      missing.push('do_periodic_graphql');
-    } else {
+    {
       usage.doActiveSeconds = 0;
       usage.doRowsRead = 0;
       usage.doRowsWritten = 0;
       const rows =
-        (accountNode(perRes.data)?.durableObjectsPeriodicGroups as Array<{
+        (acc.durableObjectsPeriodicGroups as Array<{
           sum?: {
             activeTime?: number;
             rowsRead?: number;
@@ -809,41 +849,9 @@ export async function collectCloudflareUsage(
       }
     }
 
-    const storageQ = `
-      query(
-        $accountTag: String!
-        $start: Time!
-        $end: Time!
-        $namespaceIds: [string!]!
-      ) {
-        viewer {
-          accounts(filter: { accountTag: $accountTag }) {
-            durableObjectsSqlStorageGroups(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                namespaceId_in: $namespaceIds
-              }
-              orderBy: [datetime_DESC]
-            ) {
-              max { storedBytes }
-              dimensions { datetime namespaceId }
-            }
-          }
-        }
-      }`;
-    const storageRes = await graphql(token, storageQ, {
-      accountTag: accountId,
-      start: startIso,
-      end: endIso,
-      namespaceIds: CLIPPY_DO_NAMESPACE_IDS,
-    });
-    if (storageRes.errors?.length || !storageRes.data) {
-      missing.push('do_storage_graphql');
-    } else {
+    {
       const rows =
-        (accountNode(storageRes.data)?.durableObjectsSqlStorageGroups as Array<{
+        (acc.durableObjectsSqlStorageGroups as Array<{
           max?: { storedBytes?: number };
           dimensions?: { datetime?: string; namespaceId?: string };
         }>) ?? [];
@@ -877,52 +885,10 @@ export async function collectCloudflareUsage(
       }
       usage.doStorageGbMonths = gbMonthsFromDailyPeaks(dailyPeaks);
     }
-  }
 
-  // Containers — containersUsageAdaptiveGroups
-  // https://developers.cloudflare.com/analytics/graphql-api/tutorials/querying-container-metrics/
-  {
-    const q = `
-      query($accountTag: String!, $start: Time!, $end: Time!, $applicationId: String!) {
-        viewer {
-          accounts(filter: { accountTag: $accountTag }) {
-            containersUsageAdaptiveGroups(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                applicationId: $applicationId
-              }
-            ) {
-              sum {
-                cpuTimeSec
-                allocatedMemory
-                allocatedDisk
-                txBytes
-              }
-              dimensions { region }
-            }
-          }
-        }
-      }`;
-    const res = await graphql(token, q, {
-      accountTag: accountId,
-      start: startIso,
-      end: endIso,
-      applicationId: containerAppId,
-    });
-    if (res.errors?.length || !res.data) {
-      missing.push('containers_graphql');
-      const clipDo = usage.doByClass['ClipContainer']?.activeSeconds;
-      if (typeof clipDo === 'number' && clipDo > 0) {
-        usage.containerActiveSeconds = clipDo;
-      } else {
-        usage.containerActiveSeconds = await containerSecondsFromJobs(env, start, end);
-        missing.push('containers_estimated_from_jobs');
-      }
-    } else {
+    {
       const groups =
-        (accountNode(res.data)?.containersUsageAdaptiveGroups as Array<{
+        (acc.containersUsageAdaptiveGroups as Array<{
           sum?: {
             cpuTimeSec?: number;
             allocatedMemory?: number;
@@ -946,58 +912,66 @@ export async function collectCloudflareUsage(
         usage.containerTxBytesByRegion[region] =
           (usage.containerTxBytesByRegion[region] ?? 0) + txBytes;
       }
-      usage.containerActiveSeconds =
-        usage.containerMemoryByteSeconds / CONTAINER_MEMORY_BYTES;
+      if (usage.containerMemoryByteSeconds > 0) {
+        usage.containerActiveSeconds =
+          usage.containerMemoryByteSeconds / CONTAINER_MEMORY_BYTES;
+      } else {
+        const clipDo = usage.doByClass['ClipContainer']?.activeSeconds;
+        if (typeof clipDo === 'number' && clipDo > 0) {
+          usage.containerActiveSeconds = clipDo;
+        } else {
+          usage.containerActiveSeconds = await containerSecondsFromJobs(
+            env,
+            start,
+            end,
+          );
+          missing.push('containers_estimated_from_jobs');
+        }
+      }
     }
   }
 
-  // Email — Clippy mailbox only (from contains clippy@…).
-  // Exact `from: "clippy@…"` returns 0 because CF stores `"Clippy" <clippy@…>`.
-  // https://developers.cloudflare.com/email-service/platform/pricing/
-  {
-    const zoneId = env.CF_ZONE_ID?.trim() || CLIPPY_ZONE_ID;
-    const q = `
-      query($zoneTag: String!, $start: Time!, $end: Time!, $fromLike: string!) {
-        viewer {
-          zones(filter: { zoneTag: $zoneTag }) {
-            emailSendingAdaptive(
-              limit: 10000
-              filter: {
-                datetime_geq: $start
-                datetime_lt: $end
-                from_like: $fromLike
-              }
-            ) {
-              messageId
-              status
-              from
+  const emailQ = `
+    query($zoneTag: String!, $start: Time!, $end: Time!, $fromLike: string!) {
+      viewer {
+        zones(filter: { zoneTag: $zoneTag }) {
+          emailSendingAdaptive(
+            limit: 10000
+            filter: {
+              datetime_geq: $start
+              datetime_lt: $end
+              from_like: $fromLike
             }
+          ) {
+            messageId
+            status
+            from
           }
         }
-      }`;
-    const res = await graphql(token, q, {
-      zoneTag: zoneId,
-      start: startIso,
-      end: endIso,
-      fromLike: `%${CLIPPY_EMAIL_FROM}%`,
-    });
-    if (res.errors?.length || !res.data) {
-      missing.push('email_graphql');
-    } else {
-      const events =
-        (
-          res.data as {
-            viewer?: {
-              zones?: Array<{
-                emailSendingAdaptive?: EmailEvent[];
-              }>;
-            };
-          }
-        ).viewer?.zones?.[0]?.emailSendingAdaptive ?? [];
-      const aggregated = aggregateEmailEvents(events);
-      usage.emailSent = aggregated.emailSent;
-      usage.emailByStatus = aggregated.emailByStatus;
-    }
+      }
+    }`;
+  const emailRes = await graphql(token, emailQ, {
+    zoneTag: zoneId,
+    start: startIso,
+    end: endIso,
+    fromLike: `%${CLIPPY_EMAIL_FROM}%`,
+  });
+  if (gqlFailed(emailRes)) {
+    missing.push(`email_graphql${gqlErrorTag(emailRes)}`);
+  } else {
+    const events =
+      (
+        emailRes.data as {
+          viewer?: {
+            zones?: Array<{
+              emailSendingAdaptive?: EmailEvent[];
+            }>;
+          };
+        }
+      ).viewer?.zones?.[0]?.emailSendingAdaptive ?? [];
+    const aggregated = aggregateEmailEvents(events);
+    usage.emailSent = aggregated.emailSent;
+    usage.emailByStatus = aggregated.emailByStatus;
   }
 
   return { usage, missingSources: missing };

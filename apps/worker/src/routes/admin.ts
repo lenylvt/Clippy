@@ -1,7 +1,11 @@
 import { cleanYoutubeTitle } from '@clippy/shared/title';
 import { extractYoutubeVideoId } from '@clippy/shared/youtube';
 import { validateJobPayload } from '@clippy/shared/validateJob';
-import { requireAdmin } from '../admin/requireAdmin';
+import {
+  adminCookieHeader,
+  clearAdminCookieHeader,
+  requireAdmin,
+} from '../admin/requireAdmin';
 import { collectCloudflareUsage } from '../admin/cfAnalytics';
 import { estimateCosts } from '../admin/costEstimate';
 import {
@@ -33,6 +37,7 @@ import { asOptionalNumber, asOptionalString, readJsonObject } from '../http/body
 import { workerOrigin } from '../http/cors';
 import { createId, isUuid } from '../http/ids';
 import { errorResponse, jsonResponse } from '../http/responses';
+import { timingSafeEqualStr } from '../auth/crypto';
 import type { Env } from '../types';
 import type { PeriodKey } from '../admin/pricing';
 
@@ -58,6 +63,30 @@ export async function handleAdminRoutes(
   pathname: string,
 ): Promise<Response | null> {
   if (!pathname.startsWith('/api/admin')) return null;
+
+  // Login / logout before auth gate — establishes HttpOnly cookie session.
+  if (request.method === 'POST' && pathname === '/api/admin/login') {
+    const secret = env.ADMIN_SECRET;
+    if (typeof secret !== 'string' || secret.length === 0) {
+      return unauthorized(request, env);
+    }
+    const parsed = await readJsonObject(request);
+    if (!parsed.ok) return errorResponse(request, env, parsed.error, 400);
+    const candidate = (asOptionalString(parsed.body.secret) ?? '').trim();
+    if (!candidate || !timingSafeEqualStr(candidate, secret)) {
+      return unauthorized(request, env);
+    }
+    const res = jsonResponse(request, env, { ok: true });
+    res.headers.append('Set-Cookie', adminCookieHeader(secret));
+    return res;
+  }
+
+  if (request.method === 'POST' && pathname === '/api/admin/logout') {
+    const res = jsonResponse(request, env, { ok: true });
+    res.headers.append('Set-Cookie', clearAdminCookieHeader());
+    return res;
+  }
+
   if (!requireAdmin(request, env)) return unauthorized(request, env);
 
   const url = new URL(request.url);

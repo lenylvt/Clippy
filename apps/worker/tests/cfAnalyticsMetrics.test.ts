@@ -3,8 +3,46 @@ import {
   aggregateEmailEvents,
   aggregateEmailGroups,
   gbMonthsFromDailyPeaks,
+  normalizeGraphqlResponse,
 } from '../src/admin/cfAnalytics';
 import { emptyUsage, estimateCosts } from '../src/admin/costEstimate';
+
+describe('normalizeGraphqlResponse', () => {
+  it('unwraps Cloudflare REST envelope result.viewer into data', () => {
+    const normalized = normalizeGraphqlResponse({
+      success: true,
+      errors: [],
+      result: {
+        viewer: {
+          accounts: [{ workersInvocationsAdaptive: [{ sum: { requests: 669 } }] }],
+        },
+      },
+    });
+    expect(normalized.errors).toBeUndefined();
+    expect(normalized.data).toEqual({
+      viewer: {
+        accounts: [{ workersInvocationsAdaptive: [{ sum: { requests: 669 } }] }],
+      },
+    });
+  });
+
+  it('surfaces REST auth failures', () => {
+    const normalized = normalizeGraphqlResponse({
+      success: false,
+      errors: [{ code: 9106, message: 'Missing Authorization headers' }],
+      result: null,
+    });
+    expect(normalized.data).toBeUndefined();
+    expect(normalized.errors?.[0]?.message).toContain('Missing Authorization');
+  });
+
+  it('keeps bare GraphQL { data } shape', () => {
+    const normalized = normalizeGraphqlResponse({
+      data: { viewer: { accounts: [] } },
+    });
+    expect(normalized.data).toEqual({ viewer: { accounts: [] } });
+  });
+});
 
 describe('gbMonthsFromDailyPeaks', () => {
   it('averages daily peaks over a 30-day billing month', () => {
@@ -96,17 +134,17 @@ describe('Clippy GraphQL reference window 2026-08-07', () => {
     expect(REFERENCE_2026_08_07.workersCronRequests).toBe(312);
   });
 
-  it('keeps reference usage inside included quotas at $0 attributed overage', () => {
+  it('prices reference Clippy usage at gross list rates', () => {
     const usage = emptyUsage();
     Object.assign(usage, REFERENCE_2026_08_07);
     const est = estimateCosts('billing', usage, [], Date.UTC(2026, 7, 8), 1);
-    expect(est.totalUsd).toBe(0);
+    expect(est.totalUsd).toBeGreaterThan(0);
     expect(est.usage.doRowsRead).toBe(3458);
   });
 });
 
-describe('estimateCosts quotas vs Clippy usage', () => {
-  it('keeps Clippy-scale usage at $0 overage inside monthly included', () => {
+describe('estimateCosts gross Clippy usage', () => {
+  it('prices Clippy-scale usage above zero without quotas', () => {
     const usage = emptyUsage();
     usage.workersRequests = 27_126;
     usage.workersCpuMs = 25_545.738;
@@ -127,6 +165,6 @@ describe('estimateCosts quotas vs Clippy usage', () => {
     usage.containerTxBytes = 283_718_428;
     usage.emailSent = 3;
     const est = estimateCosts('billing', usage, [], Date.UTC(2026, 7, 8), 1);
-    expect(est.totalUsd).toBe(0);
+    expect(est.totalUsd).toBeGreaterThan(0);
   });
 });

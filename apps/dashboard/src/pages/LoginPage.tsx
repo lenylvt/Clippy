@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import { Button, LayerCard, SensitiveInput, Text, Banner } from '@cloudflare/kumo';
-import { api, getAdminToken, setAdminToken, ApiError } from '@/lib/api';
+import { getAdminToken, loginAdmin, ApiError } from '@/lib/api';
+
+/** Continue is enabled once the secret field is non-empty (any length). */
+export function canSubmitAdminSecret(token: string, loading: boolean): boolean {
+  return !loading && token.trim().length > 0;
+}
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -15,15 +20,13 @@ export function LoginPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!canSubmitAdminSecret(token, false)) return;
     setError('');
     setLoading(true);
-    const trimmed = token.trim();
-    setAdminToken(trimmed);
     try {
-      await api('/api/admin/overview?period=billing');
+      await loginAdmin(token.trim());
       navigate('/', { replace: true });
     } catch (err) {
-      sessionStorage.removeItem('clippy_admin_token');
       setError(err instanceof ApiError ? err.code : 'login_failed');
     } finally {
       setLoading(false);
@@ -41,7 +44,7 @@ export function LoginPage() {
         </div>
         <form className="mt-6 grid gap-4" onSubmit={onSubmit}>
           {error ? (
-            <Banner variant="danger" title="Access denied">
+            <Banner variant="error" title="Access denied">
               {error}
             </Banner>
           ) : null}
@@ -55,7 +58,7 @@ export function LoginPage() {
           <Button
             type="submit"
             variant="primary"
-            disabled={loading || token.trim().length < 16}
+            disabled={!canSubmitAdminSecret(token, loading)}
           >
             {loading ? 'Checking…' : 'Continue'}
           </Button>

@@ -171,18 +171,12 @@ export function OverviewPage() {
             ))}
           </div>
 
-          {data.costs.missingSources.length > 0 ? (
-            <Banner variant="alert" title="Some metrics are estimated or unavailable">
-              {data.costs.missingSources.join(', ')}
-            </Banner>
-          ) : null}
-
           <LayerCard className="px-5 py-4 ring ring-kumo-line">
             <Text as="h2" variant="heading3" className="mb-3">
-              Attributed Clippy overage
+              Estimated Clippy cost
             </Text>
             <Text as="p" className="text-kumo-subtle mb-2">
-              Stack-only estimate after included quotas — not the account invoice.
+              Gross stack usage at list rates — no included quotas.
             </Text>
             <Text as="p" variant="heading1" className="tabular-nums">
               ${data.costs.totalUsd.toFixed(4)}

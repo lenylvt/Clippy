@@ -4,11 +4,9 @@ import {
   DO_RATES,
   EMAIL_RATES,
   R2_RATES,
-  WORKERS_INCLUDED,
   WORKERS_RATES,
   billOverage,
   periodMs,
-  prorateMonthly,
   type PeriodKey,
 } from './pricing';
 
@@ -86,13 +84,9 @@ function roundUsd(n: number): number {
   return Math.round(n * 10_000) / 10_000;
 }
 
-function includedForPeriod(monthly: number, days: number, fullMonth: boolean): number {
-  return fullMonth ? monthly : prorateMonthly(monthly, days);
-}
-
-function roundedR2Cost(usage: number, included: number, billingUnit: number, unitPrice: number) {
-  const billable = Math.max(0, usage - included);
-  return billable > 0 ? Math.ceil(billable / billingUnit) * unitPrice : 0;
+/** Gross cost at list rate (no included allowance, no invoice unit rounding). */
+function rateCost(usage: number, ratePerUnit: number): number {
+  return Math.max(0, usage) * ratePerUnit;
 }
 
 /** SI units matching Cloudflare dashboard (kB = 1000). */
@@ -104,7 +98,7 @@ export function formatBytes(bytes: number): string {
   return `${(n / 1_000_000_000).toFixed(3)} GB`;
 }
 
-
+/** Gross Clippy-attributable cost — rates only, no plan included quotas. */
 export function estimateCosts(
   period: PeriodKey,
   usage: UsageSnapshot,
@@ -112,21 +106,12 @@ export function estimateCosts(
   now = Date.now(),
   cycleDay = 1,
 ): CostEstimate {
-  const { start, end, days, fullMonthQuotas } = periodMs(period, now, cycleDay);
+  const { start, end, days } = periodMs(period, now, cycleDay);
   const lineItems: CostLineItem[] = [];
-  const included = (monthly: number) => includedForPeriod(monthly, days, fullMonthQuotas);
 
   const workersUsd =
-    billOverage(
-      usage.workersRequests,
-      included(WORKERS_INCLUDED.requests),
-      WORKERS_RATES.perMillionRequests / 1_000_000,
-    ) +
-    billOverage(
-      usage.workersCpuMs,
-      included(WORKERS_INCLUDED.cpuMs),
-      WORKERS_RATES.perMillionCpuMs / 1_000_000,
-    );
+    billOverage(usage.workersRequests, 0, WORKERS_RATES.perMillionRequests / 1_000_000) +
+    billOverage(usage.workersCpuMs, 0, WORKERS_RATES.perMillionCpuMs / 1_000_000);
   lineItems.push({
     id: 'workers',
     label: 'Workers (clippy)',
@@ -144,24 +129,9 @@ export function estimateCosts(
     .sort((a, b) => b[1] - a[1])
     .map(([action, n]) => `${action}=${n.toLocaleString()}`);
   const r2Usd =
-    roundedR2Cost(
-      usage.r2StorageGbMonths,
-      included(R2_RATES.includedStorageGb),
-      1,
-      R2_RATES.storagePerGbMonth,
-    ) +
-    roundedR2Cost(
-      usage.r2ClassA,
-      included(R2_RATES.includedClassA),
-      1_000_000,
-      R2_RATES.classAPerMillion,
-    ) +
-    roundedR2Cost(
-      usage.r2ClassB,
-      included(R2_RATES.includedClassB),
-      1_000_000,
-      R2_RATES.classBPerMillion,
-    );
+    rateCost(usage.r2StorageGbMonths, R2_RATES.storagePerGbMonth) +
+    rateCost(usage.r2ClassA / 1_000_000, R2_RATES.classAPerMillion) +
+    rateCost(usage.r2ClassB / 1_000_000, R2_RATES.classBPerMillion);
   lineItems.push({
     id: 'r2',
     label: 'R2 (clippy-clips)',
@@ -177,21 +147,9 @@ export function estimateCosts(
   });
 
   const d1Usd =
-    billOverage(
-      usage.d1RowsRead,
-      included(D1_RATES.includedRowsRead),
-      D1_RATES.rowsReadPerMillion / 1_000_000,
-    ) +
-    billOverage(
-      usage.d1RowsWritten,
-      included(D1_RATES.includedRowsWritten),
-      D1_RATES.rowsWrittenPerMillion / 1_000_000,
-    ) +
-    billOverage(
-      usage.d1StorageGbMonths,
-      included(D1_RATES.includedStorageGb),
-      D1_RATES.storagePerGbMonth,
-    );
+    billOverage(usage.d1RowsRead, 0, D1_RATES.rowsReadPerMillion / 1_000_000) +
+    billOverage(usage.d1RowsWritten, 0, D1_RATES.rowsWrittenPerMillion / 1_000_000) +
+    billOverage(usage.d1StorageGbMonths, 0, D1_RATES.storagePerGbMonth);
   lineItems.push({
     id: 'd1',
     label: 'D1 (clippy)',
@@ -208,31 +166,11 @@ export function estimateCosts(
 
   const doGbS = usage.doActiveSeconds * DO_RATES.memoryGb;
   const doUsd =
-    billOverage(
-      usage.doRequests,
-      included(DO_RATES.includedRequests),
-      DO_RATES.requestsPerMillion / 1_000_000,
-    ) +
-    billOverage(
-      doGbS,
-      included(DO_RATES.includedGbS),
-      DO_RATES.durationPerMillionGbS / 1_000_000,
-    ) +
-    billOverage(
-      usage.doRowsRead,
-      included(DO_RATES.includedRowsRead),
-      DO_RATES.rowsReadPerMillion / 1_000_000,
-    ) +
-    billOverage(
-      usage.doRowsWritten,
-      included(DO_RATES.includedRowsWritten),
-      DO_RATES.rowsWrittenPerMillion / 1_000_000,
-    ) +
-    billOverage(
-      usage.doStorageGbMonths,
-      included(DO_RATES.includedStorageGb),
-      DO_RATES.storagePerGbMonth,
-    );
+    billOverage(usage.doRequests, 0, DO_RATES.requestsPerMillion / 1_000_000) +
+    billOverage(doGbS, 0, DO_RATES.durationPerMillionGbS / 1_000_000) +
+    billOverage(usage.doRowsRead, 0, DO_RATES.rowsReadPerMillion / 1_000_000) +
+    billOverage(usage.doRowsWritten, 0, DO_RATES.rowsWrittenPerMillion / 1_000_000) +
+    billOverage(usage.doStorageGbMonths, 0, DO_RATES.storagePerGbMonth);
   const doClassParts = Object.entries(usage.doByClass).map(
     ([cls, u]) =>
       `${cls}: ${u.requests.toLocaleString()} req, ${u.activeSeconds.toLocaleString(undefined, { maximumFractionDigits: 2 })}s, ${formatBytes(u.storedBytes)}, ${u.rowsRead.toLocaleString()} rows read, ${u.rowsWritten.toLocaleString()} rows written`,
@@ -255,7 +193,7 @@ export function estimateCosts(
   const c = CONTAINER_STANDARD_3;
   const memoryGiBSeconds =
     usage.containerMemoryByteSeconds > 0
-      ? usage.containerMemoryByteSeconds / (1024 ** 3)
+      ? usage.containerMemoryByteSeconds / 1024 ** 3
       : usage.containerActiveSeconds * c.memoryGiB;
   const diskGbSeconds =
     usage.containerDiskByteSeconds > 0
@@ -267,26 +205,10 @@ export function estimateCosts(
       : usage.containerActiveSeconds * c.vcpu;
   const containerEgressGb = usage.containerTxBytes / 1_000_000_000;
   const containerUsd =
-    billOverage(
-      memoryGiBSeconds,
-      included(c.includedMemoryGiBHours * 3600),
-      c.memoryPerGiBSecond,
-    ) +
-    billOverage(
-      cpuSeconds,
-      included(c.includedVcpuMinutes * 60),
-      c.vcpuPerSecond,
-    ) +
-    billOverage(
-      diskGbSeconds,
-      included(c.includedDiskGbHours * 3600),
-      c.diskPerGbSecond,
-    ) +
-    billOverage(
-      containerEgressGb,
-      included(c.includedEgressGb),
-      c.egressPerGb,
-    );
+    billOverage(memoryGiBSeconds, 0, c.memoryPerGiBSecond) +
+    billOverage(cpuSeconds, 0, c.vcpuPerSecond) +
+    billOverage(diskGbSeconds, 0, c.diskPerGbSecond) +
+    billOverage(containerEgressGb, 0, c.egressPerGb);
   lineItems.push({
     id: 'containers',
     label: 'Containers (clippy-clipcontainer · standard-3)',
@@ -304,11 +226,7 @@ export function estimateCosts(
     usd: roundUsd(containerUsd),
   });
 
-  const emailUsd = billOverage(
-    usage.emailSent,
-    included(EMAIL_RATES.includedPerMonth),
-    EMAIL_RATES.perThousand / 1000,
-  );
+  const emailUsd = billOverage(usage.emailSent, 0, EMAIL_RATES.perThousand / 1000);
   const emailStatusParts = Object.entries(usage.emailByStatus)
     .sort((a, b) => b[1] - a[1])
     .map(([status, n]) => `${status}=${n.toLocaleString()}`);

@@ -9,7 +9,7 @@ import {
   SignOutIcon,
   UsersIcon,
 } from '@phosphor-icons/react';
-import { clearAdminToken, getAdminToken } from '@/lib/api';
+import { getAdminToken, logoutAdmin } from '@/lib/api';
 
 const NAV = [
   { to: '/', label: 'Overview', icon: ChartBarIcon },
@@ -73,8 +73,7 @@ export function AppShell() {
             icon={<SignOutIcon />}
             className="w-full justify-start"
             onClick={() => {
-              clearAdminToken();
-              navigate('/login');
+              void logoutAdmin().finally(() => navigate('/login'));
             }}
           >
             Sign out

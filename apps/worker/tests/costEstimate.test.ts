@@ -31,7 +31,7 @@ describe('periodMs billing', () => {
   });
 });
 
-describe('estimateCosts with Cloudflare included usage', () => {
+describe('estimateCosts gross rates (no included quotas)', () => {
   it('does not include Workers Paid plan in total', () => {
     const est = estimateCosts('billing', emptyUsage(), [], Date.UTC(2026, 7, 8), 1);
     expect(est.lineItems.find((i) => i.id === 'plan_subscription')).toBeUndefined();
@@ -39,16 +39,16 @@ describe('estimateCosts with Cloudflare included usage', () => {
     expect(est.billingStart).toBe(Date.UTC(2026, 7, 1));
   });
 
-  it('bills email only after the 3k monthly allowance', () => {
+  it('bills all email at list rate', () => {
     const usage = emptyUsage();
     usage.emailSent = 4_000;
     const est = estimateCosts('billing', usage, [], Date.UTC(2026, 7, 8), 1);
-    expect(est.lineItems.find((i) => i.id === 'email')?.usd).toBe(0.35);
+    expect(est.lineItems.find((i) => i.id === 'email')?.usd).toBe(1.4);
   });
 
-  it('bills workers requests only above the monthly allowance', () => {
+  it('bills all workers requests at list rate', () => {
     const usage = emptyUsage();
-    usage.workersRequests = 11_000_000;
+    usage.workersRequests = 1_000_000;
     const est = estimateCosts('billing', usage);
     expect(est.lineItems.find((i) => i.id === 'workers')?.usd).toBe(0.3);
   });
@@ -94,6 +94,17 @@ describe('estimateCosts with Cloudflare included usage', () => {
     expect(label).toContain('PutObject=60');
     expect(label).toContain('GetObject=500');
     expect(label).toContain('ListObjects=50');
+  });
+
+  it('prices tiny R2 usage proportionally (no million-unit ceil)', () => {
+    const usage = emptyUsage();
+    usage.r2ClassA = 44;
+    usage.r2ClassB = 60;
+    usage.r2StorageGbMonths = 0.002;
+    const est = estimateCosts('billing', usage);
+    // 44/1e6*4.5 + 60/1e6*0.36 + 0.002*0.015 ≈ 0.00025 → rounded to 0.0002
+    expect(est.lineItems.find((i) => i.id === 'r2')!.usd).toBe(0.0002);
+    expect(est.lineItems.find((i) => i.id === 'r2')!.usd).toBeLessThan(0.01);
   });
 });
 
