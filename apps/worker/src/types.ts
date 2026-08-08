@@ -119,6 +119,22 @@ export type Env = {
   REVIEW_OTP?: string;
   /** Static assets (Kumo install SPA under /install/). */
   ASSETS?: Fetcher;
+  /**
+   * Admin dashboard Bearer secret (`Authorization: Bearer …`).
+   * Set via: `wrangler secret put ADMIN_SECRET`
+   */
+  ADMIN_SECRET?: string;
+  /** Cloudflare GraphQL Analytics (optional — improves cost estimates). */
+  CF_API_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
+  CF_ZONE_ID?: string;
+  CF_WORKER_NAME?: string;
+  /** D1 database UUID for clippy (defaults to wrangler database_id). */
+  CF_D1_DATABASE_ID?: string;
+  /** Containers application UUID (clippy-clipcontainer). */
+  CF_CONTAINER_APP_ID?: string;
+  /** Day of month (1–28) when Cloudflare billing cycle renews. Default 1. */
+  CF_BILLING_CYCLE_DAY?: string;
 };
 
 /** Fail-fast when the worker is misconfigured without an internal secret. */

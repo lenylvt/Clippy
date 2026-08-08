@@ -1,0 +1,1 @@
+{"$schema":"https://ui.cloudflare.com/schema.json","aliases":{"components":"@/components","utils":"@/lib/utils","ui":"@/components/ui","lib":"@/lib","hooks":"@/hooks"},"blocksDir":"src/components/kumo"}

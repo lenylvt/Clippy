@@ -29,6 +29,8 @@ import {
   EXTENSION_ZIP_PATH,
 } from './routes/extension-release';
 import { handleInstall, INSTALL_PATH } from './routes/install';
+import { handleAdminRoutes } from './routes/admin';
+import { handleDashboard, handleDashboardSpa } from './routes/dashboard';
 import { requireContainerSecret, type Env } from './types';
 
 /** Durable Object class exports required by wrangler bindings. */
@@ -59,7 +61,8 @@ const handler: ExportedHandler<Env> = {
     }
 
     const url = new URL(request.url);
-    const pathname = normalizePathname(url.pathname);
+    const rawPathname = url.pathname;
+    const pathname = normalizePathname(rawPathname);
 
     try {
       if (request.method === 'POST' && pathname === '/api/auth/request-otp') {
@@ -137,6 +140,9 @@ const handler: ExportedHandler<Env> = {
         return await handleInternalSeedReview(request, env);
       }
 
+      const adminRes = await handleAdminRoutes(request, env, pathname);
+      if (adminRes) return adminRes;
+
       // Signed query (exp+sig) or Bearer owner — not under /api.
       const clipMatch = pathname.match(/^\/clips\/([^/]+)$/);
       if ((request.method === 'GET' || request.method === 'HEAD') && clipMatch) {
@@ -154,6 +160,20 @@ const handler: ExportedHandler<Env> = {
 
       if (request.method === 'GET' && pathname === INSTALL_PATH) {
         return handleInstall(request);
+      }
+      // Dashboard: use raw path so `/dashboard/` is not redirected in a loop.
+      if (
+        (request.method === 'GET' || request.method === 'HEAD') &&
+        rawPathname === '/dashboard'
+      ) {
+        return handleDashboard(request);
+      }
+      if (
+        (request.method === 'GET' || request.method === 'HEAD') &&
+        rawPathname.startsWith('/dashboard/')
+      ) {
+        const dashboardSpa = await handleDashboardSpa(request, env, rawPathname);
+        if (dashboardSpa) return dashboardSpa;
       }
       if (request.method === 'GET' && pathname === EXTENSION_API_PATH) {
         return handleExtensionApi(request, env);

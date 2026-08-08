@@ -15,7 +15,9 @@
       "/clips/*",
       "/health",
       "/",
-      "/install"
+      "/install",
+      "/dashboard",
+      "/dashboard/*"
     ]
   },
   "r2_buckets": [
@@ -49,6 +51,10 @@
   //   R2_SECRET_ACCESS_KEY      — optional; container→R2 presigned PUT
   //   R2_ACCOUNT_ID             — optional; container→R2 presigned PUT
   //   EXPO_ACCESS_TOKEN         — optional; Expo push
+  //   ADMIN_SECRET             — dashboard /api/admin/* Bearer
+  //   CF_API_TOKEN             — optional GraphQL Analytics for cost estimates
+  //   CF_ACCOUNT_ID            — optional account id for GraphQL
+  //   CF_ZONE_ID               — optional zone id for Email Sending analytics
   // After deploy: POST /api/internal/seed-review with header X-Clippy-Internal: $CONTAINER_SECRET
   // Keep MAX_CONTAINER_SLOTS in src/constants.ts equal to containers.max_instances below.
   "vars": {
@@ -56,7 +62,14 @@
     "PUBLIC_ORIGINS": "https://clippy.runtimelayer.workers.dev",
     "EXTENSION_ID": "mdlffepdgjacjmgjjhjigieingacjpfn",
     "EXTENSION_VERSION": "0.2.6",
-    "R2_BUCKET": "clippy-clips"
+    "R2_BUCKET": "clippy-clips",
+    "CF_WORKER_NAME": "clippy",
+    "CF_ACCOUNT_ID": "5b4ba7caa456bf4c1d7f4fbd5d20c880",
+    "CF_D1_DATABASE_ID": "1d9c8f39-e352-4b2f-b1d6-2dd6959e9501",
+    "CF_CONTAINER_APP_ID": "a0381f0a-2215-47ff-ae6a-274bc183cd7c",
+    "CF_ZONE_ID": "03513d32ffe29dd95a4a972ffd1fefde",
+    // Day of month CF billing renews (see dash.cloudflare.com billing). Adjust if not the 1st.
+    "CF_BILLING_CYCLE_DAY": "1"
   },
   "triggers": {
     // */5: queue pump + idle container cleanup via JobQueue DO
