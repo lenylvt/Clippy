@@ -43,10 +43,13 @@
   //   CONTAINER_SECRET          — Worker↔container + /api/internal/*
   //   SESSION_SECRET            — clip URL HMAC (+ OTP fallback)
   //   OTP_PEPPER                — OTP HMAC pepper
+  //   REVIEW_EMAIL              — App Store review demo email (OTP bypass)
+  //   REVIEW_OTP                — Fixed 6-digit OTP for REVIEW_EMAIL
   //   R2_ACCESS_KEY_ID          — optional; container→R2 presigned PUT
   //   R2_SECRET_ACCESS_KEY      — optional; container→R2 presigned PUT
   //   R2_ACCOUNT_ID             — optional; container→R2 presigned PUT
   //   EXPO_ACCESS_TOKEN         — optional; Expo push
+  // After deploy: POST /api/internal/seed-review with header X-Clippy-Internal: $CONTAINER_SECRET
   // Keep MAX_CONTAINER_SLOTS in src/constants.ts equal to containers.max_instances below.
   "vars": {
     "PUBLIC_ORIGIN": "https://clippy.runtimelayer.workers.dev",

@@ -8,6 +8,7 @@ import { asOptionalNumber, asOptionalString, readJsonObject } from '../http/body
 import { isUuid } from '../http/ids';
 import { errorResponse, jsonResponse } from '../http/responses';
 import { getJobQueue } from '../queue/JobQueue';
+import { seedAppStoreReview } from '../review/seed';
 import type { Env } from '../types';
 
 function clampProgress(value: number): number {
@@ -134,4 +135,17 @@ export async function handleInternalResetQueue(request: Request, env: Env) {
     stopped: result.stopped,
     failedRunning: result.failedRunning,
   });
+}
+
+/** Idempotent App Store review fixtures (OTP bypass account + demo jobs/clip). */
+export async function handleInternalSeedReview(request: Request, env: Env) {
+  if (!requireInternalSecret(request, env)) {
+    return errorResponse(request, env, 'unauthorized', 401);
+  }
+  console.log('internal seed-review');
+  const result = await seedAppStoreReview(env);
+  if (!result.ok) {
+    return errorResponse(request, env, result.error, 400);
+  }
+  return jsonResponse(request, env, result);
 }

@@ -111,6 +111,12 @@ export type Env = {
   /** Optional session/HMAC pepper; clip URL signing prefers this over CONTAINER_SECRET. */
   SESSION_SECRET?: string;
   OTP_PEPPER?: string;
+  /**
+   * App Store review demo account (wrangler secrets).
+   * When both are set, that email accepts the fixed OTP without sending mail.
+   */
+  REVIEW_EMAIL?: string;
+  REVIEW_OTP?: string;
   /** Static assets (Kumo install SPA under /install/). */
   ASSETS?: Fetcher;
 };

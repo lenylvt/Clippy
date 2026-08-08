@@ -6,6 +6,7 @@ import {
   MAX_JOB_ATTEMPTS,
   STALE_JOB_MS,
 } from '../constants';
+import { REVIEW_DEVICE_TOKEN } from '../review/constants';
 import type { Env, JobRow } from '../types';
 import { allowedStatusesForJobPatch } from './mappers';
 
@@ -154,19 +155,19 @@ export async function updateJobProgress(
 export async function listQueuedJobs(env: Env, limit = 20): Promise<JobRow[]> {
   const { results } = await env.DB.prepare(
     `SELECT ${JOB_COLUMNS} FROM jobs
-     WHERE status = 'queued' AND expires_at > ?
+     WHERE status = 'queued' AND expires_at > ? AND device_token != ?
      ORDER BY created_at ASC LIMIT ?`,
   )
-    .bind(Date.now(), limit)
+    .bind(Date.now(), REVIEW_DEVICE_TOKEN, limit)
     .all<JobRow>();
   return results ?? [];
 }
 
 export async function countQueuedJobs(env: Env): Promise<number> {
   const row = await env.DB.prepare(
-    `SELECT COUNT(*) as c FROM jobs WHERE status = 'queued' AND expires_at > ?`,
+    `SELECT COUNT(*) as c FROM jobs WHERE status = 'queued' AND expires_at > ? AND device_token != ?`,
   )
-    .bind(Date.now())
+    .bind(Date.now(), REVIEW_DEVICE_TOKEN)
     .first<{ c: number }>();
   return row?.c ?? 0;
 }
@@ -174,22 +175,27 @@ export async function countQueuedJobs(env: Env): Promise<number> {
 /** Running jobs (including past expires_at — still need supervisor recovery). */
 export async function countRunningJobs(env: Env): Promise<number> {
   const row = await env.DB.prepare(
-    `SELECT COUNT(*) as c FROM jobs WHERE status = 'running'`,
-  ).first<{ c: number }>();
+    `SELECT COUNT(*) as c FROM jobs WHERE status = 'running' AND device_token != ?`,
+  )
+    .bind(REVIEW_DEVICE_TOKEN)
+    .first<{ c: number }>();
   return row?.c ?? 0;
 }
 
 /**
  * Queued (non-expired) + any running — used for idle-stop and watchdog keep-alive.
  * Running rows past expires_at still count so we never SIGTERM mid-recovery.
+ * App Store review fixtures (`REVIEW_DEVICE_TOKEN`) are excluded.
  */
 export async function countActiveJobs(env: Env): Promise<number> {
   const row = await env.DB.prepare(
     `SELECT COUNT(*) as c FROM jobs
-     WHERE status = 'running'
-        OR (status = 'queued' AND expires_at > ?)`,
+     WHERE device_token != ? AND (
+       status = 'running'
+        OR (status = 'queued' AND expires_at > ?)
+     )`,
   )
-    .bind(Date.now())
+    .bind(REVIEW_DEVICE_TOKEN, Date.now())
     .first<{ c: number }>();
   return row?.c ?? 0;
 }
@@ -221,7 +227,7 @@ export async function claimNextQueuedJob(env: Env, slot: number): Promise<JobRow
        WHERE id = (
          SELECT id FROM (
            SELECT id FROM jobs
-           WHERE status = 'queued' AND expires_at > ?
+           WHERE status = 'queued' AND expires_at > ? AND device_token != ?
            ORDER BY created_at ASC
            LIMIT 1
          )
@@ -229,7 +235,7 @@ export async function claimNextQueuedJob(env: Env, slot: number): Promise<JobRow
        AND status = 'queued'
        RETURNING ${JOB_COLUMNS}`,
     )
-      .bind(slot, now, expiresAt, now)
+      .bind(slot, now, expiresAt, now, REVIEW_DEVICE_TOKEN)
       .first<JobRow>();
 
     if (claimed) return claimed;
@@ -265,10 +271,12 @@ export async function listStaleRunningJobs(
   const cutoff = now - olderThanMs;
   const { results } = await env.DB.prepare(
     `SELECT ${JOB_COLUMNS} FROM jobs
-     WHERE status = 'running' AND (updated_at < ? OR expires_at <= ?)
+     WHERE status = 'running'
+       AND device_token != ?
+       AND (updated_at < ? OR expires_at <= ?)
      ORDER BY updated_at ASC`,
   )
-    .bind(cutoff, now)
+    .bind(REVIEW_DEVICE_TOKEN, cutoff, now)
     .all<JobRow>();
   return results ?? [];
 }

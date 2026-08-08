@@ -8,6 +8,7 @@ import { handleClipDownload, handleDeleteClip } from './routes/clips';
 import {
   handleInternalPurgeOrphans,
   handleInternalResetQueue,
+  handleInternalSeedReview,
   handleInternalStage,
   handleInternalStopContainers,
 } from './routes/internal';
@@ -130,6 +131,10 @@ const handler: ExportedHandler<Env> = {
 
       if (request.method === 'POST' && pathname === '/api/internal/purge-orphans') {
         return await handleInternalPurgeOrphans(request, env);
+      }
+
+      if (request.method === 'POST' && pathname === '/api/internal/seed-review') {
+        return await handleInternalSeedReview(request, env);
       }
 
       // Signed query (exp+sig) or Bearer owner — not under /api.

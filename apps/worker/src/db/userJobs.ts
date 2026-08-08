@@ -1,4 +1,5 @@
 import { DEFAULT_CLIPS_PAGE_LIMIT, DEFAULT_JOBS_PAGE_LIMIT } from '../constants';
+import { REVIEW_DEVICE_TOKEN } from '../review/constants';
 import type { ClipRow, Env, JobRow } from '../types';
 
 const JOB_COLUMNS = `id, status, stage, progress, video_id, video_title, youtube_url,
@@ -13,11 +14,13 @@ const CLIP_COLUMNS = `id, video_id, video_title, youtube_url, r2_key,
  * Exported for enqueue quota — wire from routes when capping concurrency.
  */
 export async function countActiveJobsForUser(env: Env, userId: string): Promise<number> {
+  // Review demo jobs use REVIEW_DEVICE_TOKEN and must not block real enqueue.
   const row = await env.DB.prepare(
     `SELECT COUNT(*) as c FROM jobs
-     WHERE user_id = ? AND status IN ('queued', 'running') AND expires_at > ?`,
+     WHERE user_id = ? AND status IN ('queued', 'running') AND expires_at > ?
+       AND device_token != ?`,
   )
-    .bind(userId, Date.now())
+    .bind(userId, Date.now(), REVIEW_DEVICE_TOKEN)
     .first<{ c: number }>();
   return row?.c ?? 0;
 }

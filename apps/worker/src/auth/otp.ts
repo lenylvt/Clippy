@@ -7,6 +7,7 @@ import {
   upsertOtp,
 } from '../db/users';
 import { createSession } from '../db/sessions';
+import { isReviewAccount, isReviewOtp, reviewOtp } from '../review/auth';
 import type { Env, UserRow } from '../types';
 import {
   OTP_LENGTH,
@@ -25,6 +26,8 @@ export { logoutSession, requireSessionUser } from './session';
 export type AuthSecrets = {
   OTP_PEPPER?: string;
   SESSION_SECRET?: string;
+  REVIEW_EMAIL?: string;
+  REVIEW_OTP?: string;
 };
 
 export type AuthEnv = Env & AuthSecrets;
@@ -105,6 +108,11 @@ export async function requestOtp(
     return { ok: false, error: 'invalid_email', status: 400 };
   }
 
+  // App Store review: acknowledge request without sending mail.
+  if (isReviewAccount(env, email) && reviewOtp(env)) {
+    return { ok: true };
+  }
+
   if (!env.EMAIL) {
     console.error('requestOtp email_not_configured');
     return { ok: false, error: 'service_unavailable', status: 503 };
@@ -171,6 +179,17 @@ export async function verifyOtp(
   const code = rawCode.trim();
   if (!isValidEmail(email) || !new RegExp(`^\\d{${OTP_LENGTH}}$`).test(code)) {
     return failVerify('invalid_payload');
+  }
+
+  // App Store review: fixed OTP, no mail / no auth_otps row.
+  if (isReviewOtp(env, email, code)) {
+    const user = await ensureUser(env, email);
+    const token = await createSession(env, user.id);
+    return {
+      ok: true,
+      token,
+      user: { id: user.id, email: normalizeEmail(user.email) },
+    };
   }
 
   if (!otpPepper(env)) {
